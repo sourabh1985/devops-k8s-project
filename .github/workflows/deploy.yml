@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Docker Login
       run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
@@ -32,7 +32,7 @@ jobs:
           cd /home/ec2-user
 
           if [ ! -d devops-project ]; then
-            git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+            git clone https://github.com/sourabh1985/devops-k8s-project
           fi
 
           cd devops-project
