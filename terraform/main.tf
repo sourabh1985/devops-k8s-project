@@ -99,19 +99,7 @@ resource "aws_instance" "k8s_server" {
     volume_type = "gp2"
   }
 
-  user_data = <<-EOF
-    #!/bin/bash
-    yum install -y git docker
-    systemctl start docker
-    systemctl enable docker
-
-    curl -sfL https://get.k3s.io | sh -
-
-    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-    echo "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> /home/ec2-user/.bashrc
-
-    ln -s /usr/local/bin/kubectl /usr/bin/kubectl
-  EOF
+  user_data = file("${path.module}/install.sh")
 
   tags = {
     Name = "k3s-server"
