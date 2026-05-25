@@ -33,13 +33,19 @@ jobs:
         username: ec2-user
         key: ${{ secrets.SSH_KEY }}
         script: |
+          sudo su - <<'EOF'
+
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
           cd /home/ec2-user
 
-          if [ ! -d devops-project ]; then
+          if [ ! -d devops-k8s-project ]; then
             git clone https://github.com/sourabh1985/devops-k8s-project
           fi
 
-          cd devops-project
+          cd devops-k8s-project
           git pull
 
           kubectl apply -f k8s/
+
+          EOF
