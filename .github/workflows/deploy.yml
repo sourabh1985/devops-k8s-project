@@ -1,56 +1,35 @@
-name: Deploy
+script: |
+  sudo su - <<'EOF'
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Install Helm (if not installed)
+  if ! command -v helm &> /dev/null; then
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  fi
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+  # Add repo
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+  helm repo update
 
-    steps:
-    - uses: actions/checkout@v4
+  # Install ingress if not installed
+  if ! helm list -n ingress-nginx | grep ingress-nginx; then
+    helm install ingress-nginx ingress-nginx/ingress-nginx \
+      --namespace ingress-nginx \
+      --create-namespace \
+      --set controller.service.type=NodePort
+    sleep 30
+  fi
 
-    - name: Docker Login
-      run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+  cd /home/ec2-user
 
-    - name: Build and Push Images
-      run: |
-        docker build -t ${{ secrets.DOCKER_USER }}/backend:latest ./backend/service1
-        docker push ${{ secrets.DOCKER_USER }}/backend:latest
+  if [ ! -d devops-k8s-project ]; then
+    git clone https://github.com/sourabh1985/devops-k8s-project
+  fi
 
-        docker build -t ${{ secrets.DOCKER_USER }}/frontend:latest ./frontend
-        docker push ${{ secrets.DOCKER_USER }}/frontend:latest
+  cd devops-k8s-project
+  git pull
 
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.6
-      with:
-        host: ${{ secrets.EC2_IP }}
-        username: ec2-user
-        key: ${{ secrets.SSH_KEY }}
-        script: |
-          sudo su - <<'EOF'
+  kubectl apply -f k8s/
 
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-          if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
-           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-           sleep 30 
-          fi
-
-          cd /home/ec2-user
-
-          if [ ! -d devops-k8s-project ]; then
-            git clone https://github.com/sourabh1985/devops-k8s-project
-          fi
-
-          cd devops-k8s-project
-          git pull
-
-          kubectl apply -f k8s/
-
-          EOF
+  EOF
