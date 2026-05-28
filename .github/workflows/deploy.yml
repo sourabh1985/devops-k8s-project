@@ -37,6 +37,11 @@ jobs:
 
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
+          if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
+           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+           sleep 30 
+          fi
+
           cd /home/ec2-user
 
           if [ ! -d devops-k8s-project ]; then
