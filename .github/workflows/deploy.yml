@@ -37,33 +37,34 @@ jobs:
 
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-          # Install Helm (if not installed)
+          # ✅ Install Helm (if not installed)
           if ! command -v helm &> /dev/null; then
             curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           fi
 
-          # Add repo
+          # ✅ Add repo (safe to run multiple times)
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
           helm repo update
 
           # ✅ Install ingress if not installed
           if ! helm list -n ingress-nginx | grep ingress-nginx; then
             helm install ingress-nginx ingress-nginx/ingress-nginx \
-            --namespace ingress-nginx \
-            --create-namespace \
-            --set controller.service.type=NodePort
+              --namespace ingress-nginx \
+              --create-namespace \
+              --set controller.service.type=NodePort
             sleep 30
           fi
 
+          # ✅ Clone repo (optional now — only for reference/debug)
           cd /home/ec2-user
 
           if [ ! -d devops-k8s-project ]; then
             git clone https://github.com/sourabh1985/devops-k8s-project
+          else
+            cd devops-k8s-project
+            git pull
           fi
 
-          cd devops-k8s-project
-          git pull
-
-          kubectl apply -f k8s/
+          echo "✅ GitOps mode enabled - ArgoCD will manage deployments"
 
           EOF
