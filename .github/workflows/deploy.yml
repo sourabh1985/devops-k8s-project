@@ -5,9 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,9 +12,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # ✅ Docker login
     - name: Docker Login
       run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
+    # ✅ Build & Push images (CI only)
     - name: Build and Push Images
       run: |
         docker build -t ${{ secrets.DOCKER_USER }}/backend:latest ./backend/service1
@@ -26,7 +25,8 @@ jobs:
         docker build -t ${{ secrets.DOCKER_USER }}/frontend:latest ./frontend
         docker push ${{ secrets.DOCKER_USER }}/frontend:latest
 
-    - name: Deploy to EC2
+    # ✅ Setup Infra + ArgoCD on EC2
+    - name: Setup Kubernetes + ArgoCD
       uses: appleboy/ssh-action@v0.1.6
       with:
         host: ${{ secrets.EC2_IP }}
@@ -37,16 +37,15 @@ jobs:
 
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-          # ✅ Install Helm (if not installed)
+          # ✅ Install Helm
           if ! command -v helm &> /dev/null; then
             curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           fi
 
-          # ✅ Add repo (safe to run multiple times)
+          # ✅ Install Ingress
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
           helm repo update
 
-          # ✅ Install ingress if not installed
           if ! helm list -n ingress-nginx | grep ingress-nginx; then
             helm install ingress-nginx ingress-nginx/ingress-nginx \
               --namespace ingress-nginx \
@@ -55,16 +54,21 @@ jobs:
             sleep 30
           fi
 
-          # ✅ Clone repo (optional now — only for reference/debug)
-          cd /home/ec2-user
+          # ✅ Install ArgoCD
+          kubectl create namespace argocd || true
 
-          if [ ! -d devops-k8s-project ]; then
-            git clone https://github.com/sourabh1985/devops-k8s-project
-          else
-            cd devops-k8s-project
-            git pull
-          fi
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-          echo "✅ GitOps mode enabled - ArgoCD will manage deployments"
+          sleep 60
+
+          # ✅ Expose ArgoCD UI
+          kubectl patch svc argocd-server -n argocd \
+            -p '{"spec": {"type": "NodePort"}}'
+
+          echo "✅ ArgoCD installed"
 
           EOF
+
+# *** get password***
+# sudo su - export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+# kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 -d
