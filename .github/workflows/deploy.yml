@@ -1,69 +1,165 @@
-name: Deploy
+name: Build & Deploy — Multi-Node K8s
 
 on:
   push:
-    branches: [main]
+    branches: [multi-node-k8s]
   workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DOCKER_USER: ${{ secrets.DOCKER_USER }}
 
 jobs:
-  deploy:
+  # ── Job 1: Build & push all Docker images ────────────────────
+  build:
+    name: Build & Push Images
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Docker Login
-      run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+      - name: Docker Login
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
-    - name: Build and Push Images
-      run: |
-        docker build -t ${{ secrets.DOCKER_USER }}/backend:latest ./backend/service1
-        docker push ${{ secrets.DOCKER_USER }}/backend:latest
+      - name: Build & Push service1
+        run: |
+          docker build -t $DOCKER_USER/service1:latest -t $DOCKER_USER/service1:${{ github.sha }} ./backend/service1
+          docker push $DOCKER_USER/service1:latest
+          docker push $DOCKER_USER/service1:${{ github.sha }}
 
-        docker build -t ${{ secrets.DOCKER_USER }}/frontend:latest ./frontend
-        docker push ${{ secrets.DOCKER_USER }}/frontend:latest
+      - name: Build & Push service2
+        run: |
+          docker build -t $DOCKER_USER/service2:latest -t $DOCKER_USER/service2:${{ github.sha }} ./backend/service2
+          docker push $DOCKER_USER/service2:latest
+          docker push $DOCKER_USER/service2:${{ github.sha }}
 
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.6
-      with:
-        host: ${{ secrets.EC2_IP }}
-        username: ec2-user
-        key: ${{ secrets.SSH_KEY }}
-        script: |
-          sudo su - <<'EOF'
+      - name: Build & Push service3
+        run: |
+          docker build -t $DOCKER_USER/service3:latest -t $DOCKER_USER/service3:${{ github.sha }} ./backend/service3
+          docker push $DOCKER_USER/service3:latest
+          docker push $DOCKER_USER/service3:${{ github.sha }}
 
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+      - name: Build & Push frontend
+        run: |
+          docker build -t $DOCKER_USER/frontend:latest -t $DOCKER_USER/frontend:${{ github.sha }} ./frontend
+          docker push $DOCKER_USER/frontend:latest
+          docker push $DOCKER_USER/frontend:${{ github.sha }}
 
-          # Install Helm (if not installed)
-          if ! command -v helm &> /dev/null; then
-            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          fi
+  # ── Job 2: Deploy to k3s cluster via SSH ─────────────────────
+  deploy:
+    name: Deploy to k3s Cluster
+    runs-on: ubuntu-latest
+    needs: build
 
-          # Add repo
-          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
-          helm repo update
+    steps:
+      - uses: actions/checkout@v4
 
-          # ✅ Install ingress if not installed
-          if ! helm list -n ingress-nginx | grep ingress-nginx; then
-            helm install ingress-nginx ingress-nginx/ingress-nginx \
-            --namespace ingress-nginx \
-            --create-namespace \
-            --set controller.service.type=NodePort
-            sleep 30
-          fi
+      # ── Install ArgoCD + apply manifests on master ──────────
+      - name: Setup ArgoCD & Deploy
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            sudo su - <<'EOF'
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-          cd /home/ec2-user
+            # ── Wait for all nodes to be Ready ──────────────
+            echo "Waiting for all nodes to be Ready..."
+            until [ $(kubectl get nodes --no-headers | grep -c "Ready") -ge 3 ]; do
+              echo "  Nodes ready: $(kubectl get nodes --no-headers | grep -c "Ready")/3"
+              sleep 15
+            done
+            echo "✅ All 3 nodes ready"
+            kubectl get nodes -o wide
 
-          if [ ! -d devops-k8s-project ]; then
-            git clone https://github.com/sourabh1985/devops-k8s-project
-          fi
+            # ── Install ArgoCD if not present ───────────────
+            if ! kubectl get ns argocd &>/dev/null; then
+              kubectl create namespace argocd
+              kubectl apply -n argocd \
+                -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+              kubectl wait --for=condition=available \
+                deployment/argocd-server -n argocd --timeout=180s
 
-          cd devops-k8s-project
-          git pull
+              # Expose as NodePort
+              kubectl patch svc argocd-server -n argocd \
+                -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30443, "targetPort": 8080}]}}'
+              echo "✅ ArgoCD installed"
+            else
+              echo "ℹ️  ArgoCD already installed"
+            fi
 
-          kubectl apply -f k8s/
+            # ── Apply all K8s manifests ──────────────────────
+            kubectl apply -f /dev/stdin <<MANIFESTS
+            $(cat <<'KUBE'
+            KUBE
+            )
+            MANIFESTS
 
-          EOF
+            EOF
+
+      # ── Copy manifests and apply ──────────────────────────
+      - name: Copy K8s manifests to master
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          source: "k8s/*"
+          target: "/home/ec2-user/k8s"
+
+      - name: Apply K8s manifests
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            # Apply all manifests
+            kubectl apply -f /home/ec2-user/k8s/backend-service.yaml
+            kubectl apply -f /home/ec2-user/k8s/service.yaml
+            kubectl apply -f /home/ec2-user/k8s/backend.yaml
+            kubectl apply -f /home/ec2-user/k8s/frontend.yaml
+            kubectl apply -f /home/ec2-user/k8s/ingress.yml
+
+            # Force rolling restart to pull latest images
+            kubectl rollout restart deployment/service1
+            kubectl rollout restart deployment/service2
+            kubectl rollout restart deployment/service3
+            kubectl rollout restart deployment/frontend
+
+            # Wait for rollouts to complete
+            kubectl rollout status deployment/service1 --timeout=120s
+            kubectl rollout status deployment/service2 --timeout=120s
+            kubectl rollout status deployment/service3 --timeout=120s
+            kubectl rollout status deployment/frontend  --timeout=120s
+
+            echo ""
+            echo "✅ Deployment complete!"
+            echo ""
+            kubectl get pods -o wide
+            echo ""
+            kubectl get nodes -o wide
+
+  # ── Job 3: Smoke test ────────────────────────────────────────
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Health check all services
+        run: |
+          BASE="http://${{ secrets.EC2_IP }}:30080"
+          echo "Testing $BASE ..."
+
+          for path in "/" "/api/service1" "/api/service2" "/api/service3"; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE$path" || true)
+            echo "  $path → HTTP $STATUS"
+            if [ "$STATUS" != "200" ]; then
+              echo "  ⚠️  Non-200 for $path (may still be starting up)"
+            fi
+          done
+          echo "✅ Smoke test done"

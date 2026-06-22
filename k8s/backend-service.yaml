@@ -1,12 +1,51 @@
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend-service
+  name: service1
+  namespace: default
+  labels:
+    app: service1
 spec:
   type: ClusterIP
   selector:
-    app: backend
+    app: service1
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 5000
       targetPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service2
+  namespace: default
+  labels:
+    app: service2
+spec:
+  type: ClusterIP
+  selector:
+    app: service2
+  ports:
+    - name: http
+      protocol: TCP
+      port: 5001
+      targetPort: 5001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service3
+  namespace: default
+  labels:
+    app: service3
+spec:
+  type: ClusterIP
+  selector:
+    app: service3
+  ports:
+    - name: http
+      protocol: TCP
+      port: 5002
+      targetPort: 5002

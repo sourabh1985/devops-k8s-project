@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Architecture Diagram</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0f172a; font-family: 'Segoe UI', Arial, sans-serif; padding: 24px; color: #e2e8f0; }
+h1 { text-align: center; color: #38bdf8; font-size: 22px; margin-bottom: 6px; }
+.subtitle { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 28px; }
+
+/* ── Layout rows ── */
+.row { display: flex; justify-content: center; align-items: flex-start; gap: 12px; margin-bottom: 0; }
+.arrow-down { display: flex; justify-content: center; align-items: center; height: 38px; color: #f59e0b; font-size: 22px; }
+.arrow-row { display: flex; justify-content: center; gap: 12px; height: 38px; }
+.arrow-col { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f59e0b; font-size: 20px; width: 220px; }
+.arrow-col span { font-size: 10px; color: #64748b; }
+
+/* ── Boxes ── */
+.box { border-radius: 10px; padding: 12px 16px; border: 1.5px solid; text-align: center; min-width: 160px; }
+.box .icon { font-size: 24px; }
+.box .title { font-weight: 700; font-size: 14px; margin: 4px 0 2px; }
+.box .sub { font-size: 11px; color: #94a3b8; }
+.box .tag { display: inline-block; font-size: 10px; padding: 1px 8px; border-radius: 999px; margin-top: 5px; }
+
+/* ── Box colour themes ── */
+.blue  { background: #1e3a5f; border-color: #3b82f6; }
+.blue .title  { color: #93c5fd; }
+.cyan  { background: #0c3547; border-color: #0284c7; }
+.cyan .title  { color: #7dd3fc; }
+.green { background: #052e16; border-color: #16a34a; }
+.green .title { color: #86efac; }
+.purple{ background: #2e1065; border-color: #7c3aed; }
+.purple .title{ color: #c4b5fd; }
+.orange{ background: #431407; border-color: #ea580c; }
+.orange .title{ color: #fdba74; }
+.gray  { background: #1e293b; border-color: #334155; }
+.gray .title  { color: #cbd5e1; }
+
+/* ── Cluster box ── */
+.cluster { border: 2px dashed #334155; border-radius: 14px; padding: 16px; background: #111827; }
+.cluster-label { font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase; }
+
+/* ── Node boxes ── */
+.node { border-radius: 10px; border: 1.5px solid; padding: 12px; flex: 1; min-width: 220px; }
+.node-master { background: #0c1f3a; border-color: #3b82f6; }
+.node-worker { background: #0c2a1a; border-color: #16a34a; }
+.node-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.node-master .node-title { color: #60a5fa; }
+.node-worker .node-title { color: #4ade80; }
+.badge { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 5px; font-weight: 600; }
+.badge-master { background: #1e40af; color: #bfdbfe; }
+.badge-worker { background: #14532d; color: #bbf7d0; }
+.pod-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.pod-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.pod { font-size: 10px; padding: 4px 8px; border-radius: 6px; font-weight: 600; border: 1px solid; }
+.pod-svc1 { background: #1e3a8a22; border-color: #3b82f6; color: #93c5fd; }
+.pod-svc2 { background: #4c1d9522; border-color: #7c3aed; color: #c4b5fd; }
+.pod-svc3 { background: #05441422; border-color: #16a34a; color: #86efac; }
+.pod-fe   { background: #92400e22; border-color: #f59e0b; color: #fcd34d; }
+.pod-sys  { background: #1e293b;   border-color: #475569; color: #94a3b8; }
+.pod-label { font-size: 10px; color: #475569; margin-bottom: 3px; }
+
+/* ── Ingress/traffic line ── */
+.traffic-box { background: #1a1033; border: 1.5px solid #7c3aed; border-radius: 10px; padding: 10px 18px; text-align: center; }
+.traffic-box .title { color: #c4b5fd; font-weight: 700; font-size: 13px; }
+.traffic-box .routes { font-size: 11px; color: #94a3b8; margin-top: 6px; line-height: 1.8; }
+.route-highlight { color: #a78bfa; font-weight: 600; }
+
+/* ── Legend ── */
+.legend { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-top: 28px; padding-top: 18px; border-top: 1px solid #1e293b; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #94a3b8; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+/* ── Connector lines ── */
+.connectors { display: flex; justify-content: center; align-items: center; gap: 12px; height: 30px; }
+.vline { width: 2px; background: #f59e0b; height: 30px; opacity: 0.6; }
+.hconnect { display: flex; justify-content: center; align-items: center; gap: 0; }
+</style>
+</head>
+<body>
+
+<h1>🚀 Multi-Node Kubernetes Architecture</h1>
+<p class="subtitle">AWS ap-south-1 · k3s (1 Master + 2 Workers) · GitHub Actions · ArgoCD · nginx-ingress · No NLB (NodePort direct)</p>
+
+<!-- ══ ROW 1: CI/CD Pipeline ══ -->
+<div class="row">
+  <div class="box blue">
+    <div class="icon">👨‍💻</div>
+    <div class="title">Developer</div>
+    <div class="sub">git push</div>
+    <div class="tag" style="background:#1e40af;color:#bfdbfe">branch: multi-node-k8s</div>
+  </div>
+
+  <div style="display:flex;align-items:center;color:#3b82f6;font-size:22px;padding-top:10px">➜</div>
+
+  <div class="box blue" style="min-width:200px">
+    <div class="icon">⚙️</div>
+    <div class="title">GitHub Actions</div>
+    <div class="sub">deploy.yml</div>
+    <div class="sub" style="margin-top:4px">① Build images &nbsp; ② Push to Hub &nbsp; ③ SSH deploy</div>
+  </div>
+
+  <div style="display:flex;align-items:center;color:#3b82f6;font-size:22px;padding-top:10px">➜</div>
+
+  <div class="box cyan">
+    <div class="icon">🐳</div>
+    <div class="title">Docker Hub</div>
+    <div class="sub">sourabhjha108/</div>
+    <div class="sub">service1 · service2 · service3 · frontend</div>
+  </div>
+</div>
+
+<!-- Arrow down from GitHub to cluster -->
+<div class="arrow-down" style="margin-left:130px">
+  <span style="display:flex;flex-direction:column;align-items:center">
+    <span style="font-size:10px;color:#f59e0b">SSH + kubectl apply</span>
+    <span style="font-size:20px;color:#f59e0b">↓</span>
+  </span>
+</div>
+
+
+<!-- ══ ROW 2: User traffic entry ══ -->
+<div class="row">
+  <div class="box orange">
+    <div class="icon">🌍</div>
+    <div class="title">User / Browser</div>
+    <div class="sub">http://&lt;master-ip&gt;:30080</div>
+  </div>
+  <div style="display:flex;align-items:center;color:#ea580c;font-size:22px;padding-top:10px">➜</div>
+  <div class="box purple" style="min-width:260px">
+    <div class="icon">🔀</div>
+    <div class="title">nginx-ingress Controller</div>
+    <div class="sub">NodePort 30080 on Master VM</div>
+    <div class="traffic-box" style="margin-top:8px">
+      <div class="routes">
+        <span class="route-highlight">/</span> → frontend-service:80<br/>
+        <span class="route-highlight">/api/service1</span> → service1:5000<br/>
+        <span class="route-highlight">/api/service2</span> → service2:5001<br/>
+        <span class="route-highlight">/api/service3</span> → service3:5002
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arrow-down">
+  <span style="display:flex;flex-direction:column;align-items:center">
+    <span style="font-size:10px;color:#64748b">routes to ClusterIP Services → Pods</span>
+    <span style="font-size:20px;color:#7c3aed">↓</span>
+  </span>
+</div>
+
+
+<!-- ══ ROW 3: K8s Cluster ══ -->
+<div class="cluster">
+  <div class="cluster-label">☸️ &nbsp; Kubernetes Cluster (k3s) — 3 Nodes, 1 Cluster</div>
+  <div class="row" style="align-items:stretch">
+
+    <!-- MASTER NODE -->
+    <div class="node node-master" style="max-width:300px">
+      <div class="node-title">🖥️ k3s Master <span class="badge badge-master">VM 1 · t3.small</span></div>
+      <div class="sub" style="font-size:11px;color:#475569;margin-bottom:8px">2 vCPU · 2 GB RAM · 20 GB EBS · ~$17/mo</div>
+
+      <div class="pod-label">System Pods (Control Plane)</div>
+      <div class="pod-row">
+        <div class="pod pod-sys">kube-apiserver</div>
+        <div class="pod pod-sys">etcd</div>
+        <div class="pod pod-sys">scheduler</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-sys">nginx-ingress ★</div>
+        <div class="pod pod-sys">ArgoCD</div>
+      </div>
+
+      <div class="pod-label" style="margin-top:10px">App Pods (scheduled here too)</div>
+      <div class="pod-row">
+        <div class="pod pod-svc1">service1 pod-1</div>
+        <div class="pod pod-svc2">service2 pod-1</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-svc3">service3 pod-1</div>
+        <div class="pod pod-fe">frontend pod-1</div>
+      </div>
+    </div>
+
+    <!-- WORKER 1 -->
+    <div class="node node-worker" style="max-width:260px">
+      <div class="node-title">🖥️ Worker Node 1 <span class="badge badge-worker">VM 2 · t3.small</span></div>
+      <div class="sub" style="font-size:11px;color:#475569;margin-bottom:8px">2 vCPU · 2 GB RAM · 20 GB EBS · ~$17/mo</div>
+
+      <div class="pod-label">App Pods</div>
+      <div class="pod-row">
+        <div class="pod pod-svc1">service1 pod-2</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-svc2">service2 pod-2</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-svc3">service3 pod-2</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-fe">frontend pod-2</div>
+      </div>
+    </div>
+
+    <!-- WORKER 2 -->
+    <div class="node node-worker" style="max-width:260px">
+      <div class="node-title">🖥️ Worker Node 2 <span class="badge badge-worker">VM 3 · t3.small</span></div>
+      <div class="sub" style="font-size:11px;color:#475569;margin-bottom:8px">2 vCPU · 2 GB RAM · 20 GB EBS · ~$17/mo</div>
+
+      <div class="pod-label">App Pods</div>
+      <div class="pod-row">
+        <div class="pod pod-svc1">service1 pod-3</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-svc2">service2 pod-3</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-svc3">service3 pod-3</div>
+      </div>
+      <div class="pod-row" style="margin-top:4px">
+        <div class="pod pod-sys">kubelet only</div>
+      </div>
+    </div>
+
+  </div><!-- end .row -->
+
+  <!-- Flannel inter-node note -->
+  <div style="text-align:center;margin-top:12px;font-size:11px;color:#475569">
+    ↔️ &nbsp; Flannel VXLAN (UDP 8472) — pods on different nodes communicate through this overlay network
+  </div>
+</div><!-- end .cluster -->
+
+
+<!-- ══ ROW 4: AWS SSM (token exchange) ══ -->
+<div style="margin-top:18px">
+  <div class="row">
+    <div class="box gray" style="min-width:340px">
+      <div style="font-size:13px;font-weight:700;color:#94a3b8">🔐 AWS SSM Parameter Store <span style="font-size:10px;font-weight:400;color:#475569">(FREE)</span></div>
+      <div class="sub" style="margin-top:6px">Master writes <code style="color:#f59e0b">/k3s/node-token</code> on boot</div>
+      <div class="sub">Workers read it to join the cluster — no manual steps</div>
+    </div>
+    <div class="box gray" style="min-width:280px">
+      <div style="font-size:13px;font-weight:700;color:#94a3b8">🔑 AWS IAM Role <span style="font-size:10px;font-weight:400;color:#475569">(FREE)</span></div>
+      <div class="sub" style="margin-top:6px">Attached to all EC2 instances</div>
+      <div class="sub">Grants <code style="color:#a78bfa">ssm:GetParameter</code> / <code style="color:#a78bfa">PutParameter</code></div>
+      <div class="sub">Scoped to <code style="color:#f59e0b">arn:aws:ssm:*:*:parameter/k3s/*</code> only</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Pod Count Summary ══ -->
+<div style="margin-top:22px;background:#1e293b;border-radius:10px;padding:16px;max-width:780px;margin-left:auto;margin-right:auto">
+  <div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-bottom:12px;text-align:center">📦 Pod Count Summary</div>
+  <div style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap">
+    <div style="text-align:center">
+      <div class="pod pod-svc1" style="font-size:12px;padding:6px 14px">service1 (Order)</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">3 pods · port 5000<br/>1 per node</div>
+    </div>
+    <div style="text-align:center">
+      <div class="pod pod-svc2" style="font-size:12px;padding:6px 14px">service2 (User)</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">3 pods · port 5001<br/>1 per node</div>
+    </div>
+    <div style="text-align:center">
+      <div class="pod pod-svc3" style="font-size:12px;padding:6px 14px">service3 (Product)</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">3 pods · port 5002<br/>1 per node</div>
+    </div>
+    <div style="text-align:center">
+      <div class="pod pod-fe" style="font-size:12px;padding:6px 14px">frontend (nginx)</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">2 pods · port 80<br/>spread across nodes</div>
+    </div>
+    <div style="text-align:center">
+      <div class="pod pod-sys" style="font-size:12px;padding:6px 14px">Total App Pods</div>
+      <div style="font-size:18px;font-weight:700;color:#38bdf8;margin-top:4px">11</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ Cost Table ══ -->
+<div style="margin-top:22px;background:#1e293b;border-radius:10px;padding:16px;max-width:700px;margin-left:auto;margin-right:auto">
+  <div style="font-size:13px;font-weight:700;color:#fcd34d;margin-bottom:12px;text-align:center">💰 Cost (ap-south-1) — STOP instances when not using!</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr style="color:#64748b;border-bottom:1px solid #334155">
+      <th style="text-align:left;padding:6px">Resource</th>
+      <th style="text-align:center;padding:6px">Count</th>
+      <th style="text-align:center;padding:6px">$/hr</th>
+      <th style="text-align:center;padding:6px">$/month (24×7)</th>
+      <th style="text-align:center;padding:6px">Free Tier?</th>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;color:#cbd5e1">
+      <td style="padding:6px">EC2 t3.small</td>
+      <td style="text-align:center;padding:6px">3</td>
+      <td style="text-align:center;padding:6px">$0.023 each</td>
+      <td style="text-align:center;padding:6px">~$50</td>
+      <td style="text-align:center;padding:6px;color:#f87171">❌ No</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;color:#cbd5e1">
+      <td style="padding:6px">EBS gp2 20GB</td>
+      <td style="text-align:center;padding:6px">3</td>
+      <td style="text-align:center;padding:6px">—</td>
+      <td style="text-align:center;padding:6px">~$6</td>
+      <td style="text-align:center;padding:6px;color:#fbbf24">⚠️ 30GB free total</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;color:#cbd5e1">
+      <td style="padding:6px">NLB</td>
+      <td style="text-align:center;padding:6px">0 ✅ removed</td>
+      <td style="text-align:center;padding:6px">—</td>
+      <td style="text-align:center;padding:6px;color:#4ade80">$0 saved!</td>
+      <td style="text-align:center;padding:6px;color:#f87171">❌ Not free</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;color:#cbd5e1">
+      <td style="padding:6px">SSM, IAM, SG</td>
+      <td style="text-align:center;padding:6px">—</td>
+      <td style="text-align:center;padding:6px">—</td>
+      <td style="text-align:center;padding:6px;color:#4ade80">$0</td>
+      <td style="text-align:center;padding:6px;color:#4ade80">✅ Free</td>
+    </tr>
+    <tr style="color:#fcd34d;font-weight:700">
+      <td style="padding:8px">TOTAL</td>
+      <td style="text-align:center;padding:8px"></td>
+      <td style="text-align:center;padding:8px">$0.069/hr</td>
+      <td style="text-align:center;padding:8px">~$56/mo</td>
+      <td style="text-align:center;padding:8px;color:#4ade80">Stop = ~$0</td>
+    </tr>
+  </table>
+  <div style="margin-top:10px;font-size:11px;color:#475569;text-align:center">
+    💡 If you use it 4 hrs/day for testing: ~$8/month total &nbsp;|&nbsp; <code style="color:#f59e0b">terraform destroy</code> when done = $0
+  </div>
+</div>
+
+<!-- ══ Legend ══ -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> k3s Master (Control + App)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Worker Nodes (App only)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;opacity:0.4"></div> service1 pods (Order)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;opacity:0.4"></div> service2 pods (User)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a;opacity:0.4"></div> service3 pods (Product)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;opacity:0.4"></div> frontend pods</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#475569"></div> System / infra pods</div>
+</div>
+
+</body>
+</html>

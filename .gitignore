@@ -1,13 +1,20 @@
-# Terraform
+# Terraform state — contains AWS resource IDs, never commit
 *.tfstate
 *.tfstate.backup
 .terraform/
 
-# Keys
+# Keys — never commit private keys
 *.pem
+*.key
 
 # OS files
 .DS_Store
+.DS_Store?
 
 # Logs
 *.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

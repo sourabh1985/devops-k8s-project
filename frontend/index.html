@@ -1,1 +1,69 @@
-<html><body><h1>DevOps App</h1></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DevOps Multi-Service App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    h1 { text-align: center; font-size: 2rem; margin-bottom: 0.5rem; color: #38bdf8; }
+    p.subtitle { text-align: center; color: #94a3b8; margin-bottom: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; max-width: 1000px; margin: 0 auto; }
+    .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; border: 1px solid #334155; }
+    .card h2 { font-size: 1.1rem; margin-bottom: 0.5rem; color: #7dd3fc; }
+    .card .status { font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; }
+    .card button { width: 100%; padding: 0.6rem; background: #0284c7; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: background 0.2s; }
+    .card button:hover { background: #0369a1; }
+    .card .response { margin-top: 1rem; background: #0f172a; border-radius: 8px; padding: 1rem; font-size: 0.8rem; color: #a3e635; white-space: pre-wrap; min-height: 60px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.75rem; }
+    .badge.svc1 { background: #1d4ed8; color: #bfdbfe; }
+    .badge.svc2 { background: #7c3aed; color: #ddd6fe; }
+    .badge.svc3 { background: #047857; color: #a7f3d0; }
+  </style>
+</head>
+<body>
+  <h1>🚀 DevOps Multi-Node K8s App</h1>
+  <p class="subtitle">3 microservices · multi-node k3s cluster · AWS NLB</p>
+
+  <div class="grid">
+    <div class="card">
+      <span class="badge svc1">Service 1</span>
+      <h2>Order Service</h2>
+      <p class="status">Flask · Port 5000 · 3 replicas</p>
+      <button onclick="callApi('/api/service1', 'res1')">Call Service 1</button>
+      <div class="response" id="res1">Click to call...</div>
+    </div>
+
+    <div class="card">
+      <span class="badge svc2">Service 2</span>
+      <h2>User Service</h2>
+      <p class="status">Flask · Port 5001 · 3 replicas</p>
+      <button onclick="callApi('/api/service2', 'res2')">Call Service 2</button>
+      <div class="response" id="res2">Click to call...</div>
+    </div>
+
+    <div class="card">
+      <span class="badge svc3">Service 3</span>
+      <h2>Product Service</h2>
+      <p class="status">Flask · Port 5002 · 3 replicas</p>
+      <button onclick="callApi('/api/service3', 'res3')">Call Service 3</button>
+      <div class="response" id="res3">Click to call...</div>
+    </div>
+  </div>
+
+  <script>
+    async function callApi(path, targetId) {
+      const el = document.getElementById(targetId);
+      el.textContent = 'Loading...';
+      try {
+        const res = await fetch(path);
+        const data = await res.json();
+        el.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        el.textContent = 'Error: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
