@@ -65,7 +65,7 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
   --create-namespace \
   --set controller.service.type=NodePort \
   --set controller.service.nodePorts.http=30080 \
-  --set controller.service.nodePorts.https=30443 \
+  --set controller.service.nodePorts.https=30444 \
   --wait --timeout=180s
 
 echo "k3s master + nginx-ingress ready"

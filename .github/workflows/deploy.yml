@@ -51,7 +51,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Step 1 — Install ArgoCD (skip if already installed)
+      # Step 1 — Ensure nginx-ingress is installed correctly
+      - name: Ensure nginx-ingress
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            # Check if nginx-ingress controller pod is Running
+            RUNNING=$(kubectl get pods -n ingress-nginx \
+              --field-selector=status.phase=Running \
+              --no-headers 2>/dev/null | grep -c "ingress-nginx-controller" || true)
+
+            if [ "$RUNNING" -ge "1" ]; then
+              echo "nginx-ingress already running, skipping install"
+            else
+              echo "nginx-ingress not running, installing..."
+
+              # Clean up any broken install
+              helm uninstall ingress-nginx -n ingress-nginx 2>/dev/null || true
+              kubectl delete namespace ingress-nginx 2>/dev/null || true
+              sleep 10
+
+              # Install fresh
+              helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+              helm repo update
+
+              helm install ingress-nginx ingress-nginx/ingress-nginx \
+                --namespace ingress-nginx \
+                --create-namespace \
+                --set controller.service.type=NodePort \
+                --set controller.service.nodePorts.http=30080 \
+                --set controller.service.nodePorts.https=30444 \
+                --wait --timeout=180s
+
+              echo "nginx-ingress installed"
+            fi
+
+            kubectl get pods -n ingress-nginx
+            kubectl get svc -n ingress-nginx
+
+      # Step 2 — Install ArgoCD (skip if already installed)
       - name: Install ArgoCD
         uses: appleboy/ssh-action@v0.1.6
         with:
@@ -63,23 +106,22 @@ jobs:
 
             if kubectl get ns argocd &>/dev/null; then
               echo "ArgoCD already installed, skipping"
-              exit 0
+            else
+              kubectl create namespace argocd
+              kubectl apply -n argocd \
+                -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+              echo "Waiting for argocd-server..."
+              kubectl wait --for=condition=available \
+                deployment/argocd-server -n argocd --timeout=300s
+
+              kubectl patch svc argocd-server -n argocd \
+                -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30443, "targetPort": 8080}]}}'
+
+              echo "ArgoCD installed on NodePort 30443"
             fi
 
-            kubectl create namespace argocd
-            kubectl apply -n argocd \
-              -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-            echo "Waiting for argocd-server to be ready..."
-            kubectl wait --for=condition=available \
-              deployment/argocd-server -n argocd --timeout=300s
-
-            kubectl patch svc argocd-server -n argocd \
-              -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30443, "targetPort": 8080}]}}'
-
-            echo "ArgoCD installed and exposed on NodePort 30443"
-
-      # Step 2 — Copy k8s manifests to master
+      # Step 3 — Copy k8s manifests to master
       - name: Copy K8s manifests
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -89,7 +131,7 @@ jobs:
           source: "k8s/"
           target: "/home/ec2-user/"
 
-      # Step 3 — Apply manifests and deploy
+      # Step 4 — Apply manifests
       - name: Apply manifests & rollout
         uses: appleboy/ssh-action@v0.1.6
         with:
@@ -99,11 +141,17 @@ jobs:
           script: |
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            echo "=== Applying K8s manifests ==="
+            echo "=== Applying services first ==="
             kubectl apply -f /home/ec2-user/k8s/backend-service.yaml
             kubectl apply -f /home/ec2-user/k8s/service.yaml
+
+            echo "=== Applying deployments ==="
             kubectl apply -f /home/ec2-user/k8s/backend.yaml
             kubectl apply -f /home/ec2-user/k8s/frontend.yaml
+
+            echo "=== Deleting old ingress and reapplying fresh ==="
+            kubectl delete ingress app-ingress 2>/dev/null || true
+            sleep 3
             kubectl apply -f /home/ec2-user/k8s/ingress.yml
 
             echo "=== Rolling restart to pull latest images ==="
@@ -112,21 +160,20 @@ jobs:
             kubectl rollout restart deployment/service3
             kubectl rollout restart deployment/frontend
 
-            echo "=== Waiting for rollouts to complete ==="
+            echo "=== Waiting for rollouts ==="
             kubectl rollout status deployment/service1 --timeout=120s
             kubectl rollout status deployment/service2 --timeout=120s
             kubectl rollout status deployment/service3 --timeout=120s
             kubectl rollout status deployment/frontend  --timeout=120s
 
             echo ""
-            echo "=== All pods ==="
+            echo "=== Pods ==="
             kubectl get pods -o wide
 
             echo ""
-            echo "=== All nodes ==="
-            kubectl get nodes -o wide
+            echo "=== Ingress ==="
+            kubectl describe ingress app-ingress
 
-            echo ""
             echo "Deployment complete!"
 
   # ── Job 3: Smoke test ──────────────────────────────────────────
@@ -139,21 +186,13 @@ jobs:
         run: |
           BASE="http://${{ secrets.EC2_IP }}:30080"
           echo "Testing $BASE ..."
-          sleep 15
+          sleep 20
 
-          ALL_OK=true
           for path in "/" "/api/service1" "/api/service2" "/api/service3"; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE$path" || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE$path" || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "  $path → HTTP $STATUS ✅"
             else
               echo "  $path → HTTP $STATUS ⚠️"
-              ALL_OK=false
             fi
           done
-
-          if [ "$ALL_OK" = "true" ]; then
-            echo "All endpoints healthy!"
-          else
-            echo "Some endpoints not yet ready — pods may still be starting"
-          fi

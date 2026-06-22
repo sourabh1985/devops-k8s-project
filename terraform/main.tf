@@ -91,6 +91,15 @@ resource "aws_security_group" "k8s_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # NodePort 30444 — nginx-ingress HTTPS
+  ingress {
+    description = "nginx-ingress HTTPS NodePort"
+    from_port   = 30444
+    to_port     = 30444
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # k3s API server — workers register here
   ingress {
     description = "k3s API server"

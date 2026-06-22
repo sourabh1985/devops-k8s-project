@@ -4,15 +4,13 @@ metadata:
   name: app-ingress
   namespace: default
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
 spec:
+  ingressClassName: nginx
   rules:
     - http:
         paths:
-          # ── Backend services ──────────────────────────────
           - path: /api/service1
             pathType: Prefix
             backend:
@@ -20,7 +18,6 @@ spec:
                 name: service1
                 port:
                   number: 5000
-
           - path: /api/service2
             pathType: Prefix
             backend:
@@ -28,7 +25,6 @@ spec:
                 name: service2
                 port:
                   number: 5001
-
           - path: /api/service3
             pathType: Prefix
             backend:
@@ -36,8 +32,6 @@ spec:
                 name: service3
                 port:
                   number: 5002
-
-          # ── Frontend ──────────────────────────────────────
           - path: /
             pathType: Prefix
             backend:

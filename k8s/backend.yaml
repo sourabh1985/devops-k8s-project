@@ -1,5 +1,5 @@
 ---
-# ── Service 1: Order Service ────────────────────────────────────
+# ── Service 1: Order Service ─────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,7 +7,6 @@ metadata:
   namespace: default
   labels:
     app: service1
-    tier: backend
 spec:
   replicas: 3
   selector:
@@ -17,12 +16,11 @@ spec:
     metadata:
       labels:
         app: service1
-        tier: backend
     spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: service1
@@ -46,16 +44,16 @@ spec:
             httpGet:
               path: /health
               port: 5000
-            initialDelaySeconds: 10
-            periodSeconds: 15
+            initialDelaySeconds: 15
+            periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
               port: 5000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
 ---
-# ── Service 2: User Service ─────────────────────────────────────
+# ── Service 2: User Service ───────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -63,7 +61,6 @@ metadata:
   namespace: default
   labels:
     app: service2
-    tier: backend
 spec:
   replicas: 3
   selector:
@@ -73,12 +70,11 @@ spec:
     metadata:
       labels:
         app: service2
-        tier: backend
     spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: service2
@@ -102,16 +98,16 @@ spec:
             httpGet:
               path: /health
               port: 5001
-            initialDelaySeconds: 10
-            periodSeconds: 15
+            initialDelaySeconds: 15
+            periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
               port: 5001
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
 ---
-# ── Service 3: Product Service ──────────────────────────────────
+# ── Service 3: Product Service ────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -119,7 +115,6 @@ metadata:
   namespace: default
   labels:
     app: service3
-    tier: backend
 spec:
   replicas: 3
   selector:
@@ -129,12 +124,11 @@ spec:
     metadata:
       labels:
         app: service3
-        tier: backend
     spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: service3
@@ -158,11 +152,11 @@ spec:
             httpGet:
               path: /health
               port: 5002
-            initialDelaySeconds: 10
-            periodSeconds: 15
+            initialDelaySeconds: 15
+            periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
               port: 5002
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
