@@ -9,11 +9,10 @@ env:
   DOCKER_USER: ${{ secrets.DOCKER_USER }}
 
 jobs:
-  # ── Job 1: Build & push all Docker images ────────────────────
+  # ── Job 1: Build & push all Docker images ─────────────────────
   build:
     name: Build & Push Images
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -44,71 +43,54 @@ jobs:
           docker push $DOCKER_USER/frontend:latest
           docker push $DOCKER_USER/frontend:${{ github.sha }}
 
-  # ── Job 2: Deploy to k3s cluster via SSH ─────────────────────
+  # ── Job 2: Deploy to k3s cluster ──────────────────────────────
   deploy:
     name: Deploy to k3s Cluster
     runs-on: ubuntu-latest
     needs: build
-
     steps:
       - uses: actions/checkout@v4
 
-      # ── Install ArgoCD + apply manifests on master ──────────
-      - name: Setup ArgoCD & Deploy
+      # Step 1 — Install ArgoCD (skip if already installed)
+      - name: Install ArgoCD
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
           script: |
-            sudo su - <<'EOF'
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            # ── Wait for all nodes to be Ready ──────────────
-            echo "Waiting for all nodes to be Ready..."
-            until [ $(kubectl get nodes --no-headers | grep -c "Ready") -ge 3 ]; do
-              echo "  Nodes ready: $(kubectl get nodes --no-headers | grep -c "Ready")/3"
-              sleep 15
-            done
-            echo "✅ All 3 nodes ready"
-            kubectl get nodes -o wide
-
-            # ── Install ArgoCD if not present ───────────────
-            if ! kubectl get ns argocd &>/dev/null; then
-              kubectl create namespace argocd
-              kubectl apply -n argocd \
-                -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-              kubectl wait --for=condition=available \
-                deployment/argocd-server -n argocd --timeout=180s
-
-              # Expose as NodePort
-              kubectl patch svc argocd-server -n argocd \
-                -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30443, "targetPort": 8080}]}}'
-              echo "✅ ArgoCD installed"
-            else
-              echo "ℹ️  ArgoCD already installed"
+            if kubectl get ns argocd &>/dev/null; then
+              echo "ArgoCD already installed, skipping"
+              exit 0
             fi
 
-            # ── Apply all K8s manifests ──────────────────────
-            kubectl apply -f /dev/stdin <<MANIFESTS
-            $(cat <<'KUBE'
-            KUBE
-            )
-            MANIFESTS
+            kubectl create namespace argocd
+            kubectl apply -n argocd \
+              -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-            EOF
+            echo "Waiting for argocd-server to be ready..."
+            kubectl wait --for=condition=available \
+              deployment/argocd-server -n argocd --timeout=300s
 
-      # ── Copy manifests and apply ──────────────────────────
-      - name: Copy K8s manifests to master
+            kubectl patch svc argocd-server -n argocd \
+              -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30443, "targetPort": 8080}]}}'
+
+            echo "ArgoCD installed and exposed on NodePort 30443"
+
+      # Step 2 — Copy k8s manifests to master
+      - name: Copy K8s manifests
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
-          source: "k8s/*"
-          target: "/home/ec2-user/k8s"
+          source: "k8s/"
+          target: "/home/ec2-user/"
 
-      - name: Apply K8s manifests
+      # Step 3 — Apply manifests and deploy
+      - name: Apply manifests & rollout
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_IP }}
@@ -117,49 +99,61 @@ jobs:
           script: |
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            # Apply all manifests
+            echo "=== Applying K8s manifests ==="
             kubectl apply -f /home/ec2-user/k8s/backend-service.yaml
             kubectl apply -f /home/ec2-user/k8s/service.yaml
             kubectl apply -f /home/ec2-user/k8s/backend.yaml
             kubectl apply -f /home/ec2-user/k8s/frontend.yaml
             kubectl apply -f /home/ec2-user/k8s/ingress.yml
 
-            # Force rolling restart to pull latest images
+            echo "=== Rolling restart to pull latest images ==="
             kubectl rollout restart deployment/service1
             kubectl rollout restart deployment/service2
             kubectl rollout restart deployment/service3
             kubectl rollout restart deployment/frontend
 
-            # Wait for rollouts to complete
+            echo "=== Waiting for rollouts to complete ==="
             kubectl rollout status deployment/service1 --timeout=120s
             kubectl rollout status deployment/service2 --timeout=120s
             kubectl rollout status deployment/service3 --timeout=120s
             kubectl rollout status deployment/frontend  --timeout=120s
 
             echo ""
-            echo "✅ Deployment complete!"
-            echo ""
+            echo "=== All pods ==="
             kubectl get pods -o wide
+
             echo ""
+            echo "=== All nodes ==="
             kubectl get nodes -o wide
 
-  # ── Job 3: Smoke test ────────────────────────────────────────
+            echo ""
+            echo "Deployment complete!"
+
+  # ── Job 3: Smoke test ──────────────────────────────────────────
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
     needs: deploy
-
     steps:
-      - name: Health check all services
+      - name: Health check all endpoints
         run: |
           BASE="http://${{ secrets.EC2_IP }}:30080"
           echo "Testing $BASE ..."
+          sleep 15
 
+          ALL_OK=true
           for path in "/" "/api/service1" "/api/service2" "/api/service3"; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE$path" || true)
-            echo "  $path → HTTP $STATUS"
-            if [ "$STATUS" != "200" ]; then
-              echo "  ⚠️  Non-200 for $path (may still be starting up)"
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE$path" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "  $path → HTTP $STATUS ✅"
+            else
+              echo "  $path → HTTP $STATUS ⚠️"
+              ALL_OK=false
             fi
           done
-          echo "✅ Smoke test done"
+
+          if [ "$ALL_OK" = "true" ]; then
+            echo "All endpoints healthy!"
+          else
+            echo "Some endpoints not yet ready — pods may still be starting"
+          fi
