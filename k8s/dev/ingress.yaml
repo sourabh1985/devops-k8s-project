@@ -6,10 +6,10 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    # Rewrite: strip the /dev prefix so Flask sees its own routes.
-    # Example: /dev/api/service1 → /api/service1
-    # The regex captures everything after /dev into $2
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # Rewrite strips /dev prefix.
+    # Pattern /dev/(.*) captures everything after /dev/ into $1
+    # rewrite-target: /$1 → /dev/api/service1 becomes /api/service1
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
@@ -17,7 +17,7 @@ spec:
     - http:
         paths:
           # /dev/api/service1 → Flask sees /api/service1
-          - path: /dev/(api/service1.*)
+          - path: /dev/api/service1(/?.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -26,7 +26,7 @@ spec:
                   number: 5000
 
           # /dev/api/service2 → Flask sees /api/service2
-          - path: /dev/(api/service2.*)
+          - path: /dev/api/service2(/?.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -35,7 +35,7 @@ spec:
                   number: 5001
 
           # /dev/api/service3 → Flask sees /api/service3
-          - path: /dev/(api/service3.*)
+          - path: /dev/api/service3(/?.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -43,7 +43,7 @@ spec:
                 port:
                   number: 5002
 
-          # /dev or /dev/ → frontend sees /
+          # /dev or /dev/anything-else → frontend sees /
           - path: /dev(/?.*)
             pathType: ImplementationSpecific
             backend:
