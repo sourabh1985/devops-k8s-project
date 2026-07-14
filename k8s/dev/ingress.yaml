@@ -1,86 +1,41 @@
----
-# ── Dev: service1 ingress — /dev/api/service1 → /api/service1 ─
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: app-ingress-dev-service1
+  name: app-ingress-dev
   namespace: dev
   annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/service1$1
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    # No rewrite needed — dev controller only handles dev namespace
+    # traffic arrives on :31080 and routes to the same /api/service* paths
 spec:
-  ingressClassName: nginx
+  ingressClassName: nginx-dev      # ← routes through dev controller (:31080)
   rules:
     - http:
         paths:
-          - path: /dev/api/service1(/?.*)
-            pathType: ImplementationSpecific
+          - path: /api/service1
+            pathType: Prefix
             backend:
               service:
                 name: service1
                 port:
                   number: 5000
----
-# ── Dev: service2 ingress — /dev/api/service2 → /api/service2 ─
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-ingress-dev-service2
-  namespace: dev
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/service2$1
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /dev/api/service2(/?.*)
-            pathType: ImplementationSpecific
+          - path: /api/service2
+            pathType: Prefix
             backend:
               service:
                 name: service2
                 port:
                   number: 5001
----
-# ── Dev: service3 ingress — /dev/api/service3 → /api/service3 ─
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-ingress-dev-service3
-  namespace: dev
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/service3$1
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /dev/api/service3(/?.*)
-            pathType: ImplementationSpecific
+          - path: /api/service3
+            pathType: Prefix
             backend:
               service:
                 name: service3
                 port:
                   number: 5002
----
-# ── Dev: frontend ingress — /dev → /  ─────────────────────────
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-ingress-dev-frontend
-  namespace: dev
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /dev(/?.*)
-            pathType: ImplementationSpecific
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: frontend-service

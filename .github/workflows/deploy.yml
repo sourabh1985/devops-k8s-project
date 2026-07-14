@@ -63,23 +63,44 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+            helm repo update
 
+            # ── Prod controller: NodePort 30080, IngressClass: nginx ──
             RUNNING=$(kubectl get pods -n ingress-nginx \
               --field-selector=status.phase=Running --no-headers 2>/dev/null \
               | grep -c "ingress-nginx-controller" || true)
-
             if [ "$RUNNING" -ge "1" ]; then
-              echo "nginx-ingress already running, skipping"
+              echo "prod nginx-ingress already running, skipping"
             else
-              helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
-              helm repo update
               helm install ingress-nginx ingress-nginx/ingress-nginx \
                 --namespace ingress-nginx --create-namespace \
                 --set controller.service.type=NodePort \
                 --set controller.service.nodePorts.http=30080 \
                 --set controller.service.nodePorts.https=30444 \
+                --set controller.ingressClassResource.name=nginx \
+                --set controller.ingressClassResource.controllerValue="k8s.io/ingress-nginx" \
                 --wait --timeout=180s
-              echo "nginx-ingress installed"
+              echo "prod nginx-ingress installed on :30080"
+            fi
+
+            # ── Dev controller: NodePort 31080, IngressClass: nginx-dev ──
+            RUNNING_DEV=$(kubectl get pods -n ingress-nginx-dev \
+              --field-selector=status.phase=Running --no-headers 2>/dev/null \
+              | grep -c "ingress-nginx-controller" || true)
+            if [ "$RUNNING_DEV" -ge "1" ]; then
+              echo "dev nginx-ingress already running, skipping"
+            else
+              helm install ingress-nginx-dev ingress-nginx/ingress-nginx \
+                --namespace ingress-nginx-dev --create-namespace \
+                --set controller.service.type=NodePort \
+                --set controller.service.nodePorts.http=31080 \
+                --set controller.service.nodePorts.https=31444 \
+                --set controller.ingressClassResource.name=nginx-dev \
+                --set controller.ingressClassResource.controllerValue="k8s.io/ingress-nginx-dev" \
+                --set controller.watchIngressWithoutClass=false \
+                --wait --timeout=180s
+              echo "dev nginx-ingress installed on :31080"
             fi
 
       - name: Install ArgoCD (if missing)

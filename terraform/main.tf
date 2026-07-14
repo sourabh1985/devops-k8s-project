@@ -73,11 +73,20 @@ resource "aws_security_group" "k8s_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # NodePort 30080 — nginx-ingress HTTP (direct access, no NLB)
+  # NodePort 30080 — nginx-ingress HTTP prod
   ingress {
-    description = "nginx-ingress HTTP NodePort"
+    description = "nginx-ingress HTTP NodePort prod"
     from_port   = 30080
     to_port     = 30080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # NodePort 31080 — nginx-ingress HTTP dev
+  ingress {
+    description = "nginx-ingress HTTP NodePort dev"
+    from_port   = 31080
+    to_port     = 31080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
