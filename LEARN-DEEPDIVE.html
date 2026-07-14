@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>K8s Deep Dive — Every Line Explained</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.7; }
+  .page { max-width: 1000px; margin: 0 auto; padding: 40px 32px; }
+
+  h1 { font-size: 28px; color: #0f172a; border-bottom: 3px solid #0ea5e9; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { font-size: 20px; color: #0369a1; margin: 36px 0 12px; padding-left: 12px; border-left: 4px solid #0ea5e9; }
+  h3 { font-size: 16px; color: #0f172a; margin: 24px 0 8px; }
+  h4 { font-size: 14px; color: #0369a1; margin: 16px 0 6px; }
+  p  { margin-bottom: 12px; color: #334155; }
+  ul, ol { margin: 8px 0 12px 24px; color: #334155; }
+  li { margin-bottom: 5px; }
+  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 32px; }
+
+  .box { border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .box-blue   { background: #eff6ff; border-left: 4px solid #3b82f6; }
+  .box-green  { background: #f0fdf4; border-left: 4px solid #16a34a; }
+  .box-yellow { background: #fffbeb; border-left: 4px solid #f59e0b; }
+  .box-purple { background: #faf5ff; border-left: 4px solid #7c3aed; }
+  .box-gray   { background: #f1f5f9; border-left: 4px solid #64748b; }
+  .box-red    { background: #fef2f2; border-left: 4px solid #ef4444; }
+  .box-title  { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+
+  /* annotated code block */
+  .code-block { background: #0f172a; border-radius: 10px; overflow: hidden; margin: 14px 0; }
+  .code-title { background: #1e293b; color: #94a3b8; font-size: 12px; padding: 8px 14px;
+                font-family: monospace; border-bottom: 1px solid #334155; }
+  .code-body  { display: table; width: 100%; border-collapse: collapse; }
+  .code-row   { display: table-row; }
+  .code-row:hover .code-num,
+  .code-row:hover .code-line { background: #1e3a5f; }
+  .code-num   { display: table-cell; color: #4b5563; font-size: 11px; padding: 1px 10px;
+                font-family: monospace; text-align: right; user-select: none; min-width: 36px;
+                border-right: 1px solid #1e293b; vertical-align: top; padding-top: 3px; }
+  .code-line  { display: table-cell; color: #e2e8f0; font-size: 12.5px; padding: 2px 12px;
+                font-family: 'Courier New', monospace; white-space: pre; vertical-align: top; }
+  .code-ann   { display: table-cell; color: #86efac; font-size: 11px; padding: 2px 12px 2px 6px;
+                font-style: italic; vertical-align: top; min-width: 260px; border-left: 1px solid #1e293b; }
+  .hl-key    { color: #93c5fd; }  /* yaml key */
+  .hl-val    { color: #fde68a; }  /* yaml value */
+  .hl-str    { color: #86efac; }  /* string */
+  .hl-cmt    { color: #6b7280; font-style: italic; }  /* comment */
+  .hl-kw     { color: #c084fc; }  /* keyword */
+  .hl-num    { color: #fb923c; }  /* number */
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { background: #0369a1; color: white; padding: 9px 12px; text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+
+  .ic { background: #e2e8f0; color: #0f172a; padding: 1px 6px; border-radius: 4px;
+        font-size: 12px; font-family: monospace; }
+
+  .link-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 12px 0; }
+  .link-box { border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; }
+  .link-arrow { color: #64748b; font-size: 18px; font-weight: 700; }
+
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 20px 0; }
+  .flow-box { border-radius: 10px; padding: 10px 24px; text-align: center; font-size: 13px;
+              font-weight: 600; min-width: 260px; }
+  .flow-arrow { font-size: 22px; color: #64748b; line-height: 1.4; }
+  .flow-note  { font-size: 11px; color: #94a3b8; }
+
+  .divider { border: none; border-top: 2px solid #e2e8f0; margin: 44px 0; }
+
+  .toc { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px;
+         padding: 20px 24px; margin-bottom: 32px; }
+  .toc h3 { color: #0369a1; margin: 0 0 12px; }
+  .toc ol { margin-left: 20px; }
+  .toc li { margin-bottom: 3px; }
+  .toc a  { color: #0284c7; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .file-header { background: linear-gradient(135deg,#0369a1,#0ea5e9); color: white;
+                 border-radius: 10px 10px 0 0; padding: 12px 18px; margin-top: 24px; }
+  .file-header .fname { font-size: 15px; font-weight: 700; font-family: monospace; }
+  .file-header .fdesc { font-size: 12px; opacity: 0.85; margin-top: 3px; }
+  .file-body { border: 2px solid #0ea5e9; border-top: none; border-radius: 0 0 10px 10px;
+               padding: 16px; margin-bottom: 16px; }
+
+  @media print { body { background: white; } .page { padding: 20px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>🔬 K8s Deep Dive — Every Line Explained</h1>
+<p class="subtitle">
+  Complete line-by-line walkthrough of every file · How they connect · How K8s manages the cluster<br/>
+  Covers: app.py → Dockerfile → requirements.txt → backend.yaml → service yaml → ingress → namespace → ArgoCD apps
+</p>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>📋 Table of Contents</h3>
+  <ol>
+    <li><a href="#bigpicture">Big Picture — How All Files Connect</a></li>
+    <li><a href="#apppy">requirements.txt + app.py — The Flask Application (every line)</a></li>
+    <li><a href="#dockerfile">Dockerfile — Packaging the App into an Image (every line)</a></li>
+    <li><a href="#backend-yaml">backend.yaml — Deployment (every line)</a></li>
+    <li><a href="#backend-service">backend-service.yaml — ClusterIP Service (every line)</a></li>
+    <li><a href="#frontend-yaml">frontend.yaml — Frontend Deployment (every line)</a></li>
+    <li><a href="#service-yaml">service.yaml — Frontend Service (every line)</a></li>
+    <li><a href="#ingress">ingress.yml — HTTP Router (every line)</a></li>
+    <li><a href="#namespaces">namespaces.yaml — Environment Isolation (every line)</a></li>
+    <li><a href="#argocd-dev">argocd/app-dev.yaml — ArgoCD Application Dev (every line)</a></li>
+    <li><a href="#argocd-prod">argocd/app-prod.yaml — ArgoCD Application Prod (every line)</a></li>
+    <li><a href="#interconnect">How K8s Connects Everything — Label System Deep Dive</a></li>
+    <li><a href="#lifecycle">K8s Cluster Management — What Happens Internally</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="bigpicture">1. Big Picture — How All Files Connect</h2>
+
+<p>Before diving into individual lines, here's the complete chain from your Python code to a live URL.</p>
+
+<div class="link-chain">
+  <div class="link-box" style="background:#dbeafe;color:#1e3a8a">app.py<br/><small>Python logic</small></div>
+  <span class="link-arrow">+</span>
+  <div class="link-box" style="background:#fef3c7;color:#78350f">requirements.txt<br/><small>dependencies</small></div>
+  <span class="link-arrow">+</span>
+  <div class="link-box" style="background:#ede9fe;color:#4c1d95">Dockerfile<br/><small>packaging</small></div>
+  <span class="link-arrow">→</span>
+  <div class="link-box" style="background:#e0f2fe;color:#0c4a6e">Docker Image<br/><small>on Docker Hub</small></div>
+  <span class="link-arrow">→</span>
+  <div class="link-box" style="background:#f0fdf4;color:#14532d">backend.yaml<br/><small>runs the image</small></div>
+  <span class="link-arrow">→</span>
+  <div class="link-box" style="background:#fdf4ff;color:#581c87">backend-service.yaml<br/><small>stable address</small></div>
+  <span class="link-arrow">→</span>
+  <div class="link-box" style="background:#fff7ed;color:#7c2d12">ingress.yml<br/><small>URL routing</small></div>
+  <span class="link-arrow">→</span>
+  <div class="link-box" style="background:#fef2f2;color:#7f1d1d">User Browser<br/><small>public access</small></div>
+</div>
+
+<table>
+  <tr><th>File</th><th>K8s Resource</th><th>Role in the chain</th><th>Connects to</th></tr>
+  <tr><td><span class="ic">app.py</span></td><td>—</td><td>Flask HTTP server, handles requests</td><td>Used by Dockerfile to build image</td></tr>
+  <tr><td><span class="ic">requirements.txt</span></td><td>—</td><td>Lists Python packages needed</td><td>Used by Dockerfile in RUN pip install</td></tr>
+  <tr><td><span class="ic">Dockerfile</span></td><td>—</td><td>Recipe to create Docker image</td><td>Produces image → pushed to Docker Hub → used by backend.yaml</td></tr>
+  <tr><td><span class="ic">backend.yaml</span></td><td>Deployment</td><td>Tells K8s to run N pods using the image</td><td>Pods get label <span class="ic">app: service1</span> → picked up by Service selector</td></tr>
+  <tr><td><span class="ic">backend-service.yaml</span></td><td>Service (ClusterIP)</td><td>Stable virtual IP for pods</td><td>Selector <span class="ic">app: service1</span> → routes to pods from backend.yaml; referenced by ingress</td></tr>
+  <tr><td><span class="ic">frontend.yaml</span></td><td>Deployment</td><td>Runs nginx serving HTML</td><td>Pods get label <span class="ic">app: frontend</span> → picked up by service.yaml</td></tr>
+  <tr><td><span class="ic">service.yaml</span></td><td>Service (ClusterIP)</td><td>Stable virtual IP for frontend</td><td>Referenced by ingress as <span class="ic">frontend-service</span></td></tr>
+  <tr><td><span class="ic">ingress.yml</span></td><td>Ingress</td><td>HTTP router — path → service</td><td>References all 4 services by name; served by nginx-ingress controller</td></tr>
+  <tr><td><span class="ic">namespaces.yaml</span></td><td>Namespace</td><td>Creates isolated environments</td><td>All other resources in k8s/dev/ and k8s/prod/ live inside these</td></tr>
+  <tr><td><span class="ic">argocd/app-dev.yaml</span></td><td>Application (ArgoCD CRD)</td><td>Tells ArgoCD to watch k8s/dev/ and sync</td><td>References namespaces.yaml (destination), git repo (source)</td></tr>
+  <tr><td><span class="ic">argocd/app-prod.yaml</span></td><td>Application (ArgoCD CRD)</td><td>Tells ArgoCD to watch k8s/prod/ (manual)</td><td>Same pattern, prod namespace, no auto-sync</td></tr>
+</table>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="apppy">2. requirements.txt + app.py — The Flask Application</h2>
+
+<div class="file-header">
+  <div class="fname">backend/service1/requirements.txt</div>
+  <div class="fdesc">Python dependency list — tells pip what to install</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">requirements.txt</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-str">flask==3.0.3</span></span><span class="code-ann">Install Flask version 3.0.3 exactly. The == pins the exact version so the image is reproducible — same version every build, no surprise upgrades.</span></div>
+  </div>
+</div>
+<div class="box box-yellow">
+  <div class="box-title">💡 Why pin versions?</div>
+  Without <span class="ic">==3.0.3</span>, pip might install Flask 4.x tomorrow and break your app silently.
+  Pinning guarantees identical behaviour on every build — local, CI, and production.
+</div>
+</div>
+
+<div class="file-header">
+  <div class="fname">backend/service1/app.py</div>
+  <div class="fdesc">Flask HTTP API — handles /api/service1 and /health endpoints</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">app.py — service1 (Order Service)</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-kw">from</span> flask <span class="hl-kw">import</span> Flask, jsonify</span><span class="code-ann">Import Flask (web framework) and jsonify (converts Python dict → JSON HTTP response)</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-kw">import</span> os</span><span class="code-ann">os module — used to read environment variables (APP_VERSION injected by K8s)</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-kw">import</span> socket</span><span class="code-ann">socket module — used to get the pod's hostname, which proves load balancing is working</span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line"></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">app = Flask(<span class="hl-str">__name__</span>)</span><span class="code-ann">Create the Flask app. __name__ = 'app' (this module's name). Flask uses it for config discovery.</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line"></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">SERVICE_NAME = <span class="hl-str">"service1"</span></span><span class="code-ann">Hardcoded service name — appears in every JSON response so you know which service replied</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line">VERSION = os.environ.get(<span class="hl-str">"APP_VERSION"</span>, <span class="hl-str">"v1"</span>)</span><span class="code-ann">Read APP_VERSION from environment. If not set, default = "v1". K8s injects this via env: in backend.yaml line 38</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line"></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">@app.route(<span class="hl-str">'/api/service1'</span>)</span><span class="code-ann">Register this function as the handler for GET /api/service1. Matches the ingress path in ingress.yml</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line"><span class="hl-kw">def</span> home():</span><span class="code-ann">Function called when /api/service1 is requested</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">    <span class="hl-kw">return</span> jsonify({</span><span class="code-ann">Return JSON response (Content-Type: application/json, HTTP 200)</span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">        <span class="hl-str">"service"</span>: SERVICE_NAME,</span><span class="code-ann">"service1" — identifies which microservice responded</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">        <span class="hl-str">"version"</span>: VERSION,</span><span class="code-ann">Value from APP_VERSION env var — shows "v1". Useful to confirm canary (new version shows "v2")</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">        <span class="hl-str">"message"</span>: <span class="hl-str">"Hello from Service 1 - Order Service"</span>,</span><span class="code-ann">Human-readable message confirming which service this is</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">        <span class="hl-str">"host"</span>: socket.gethostname()</span><span class="code-ann">Pod's hostname (e.g. "service1-7d9f8-xk2p"). Each pod has a unique hostname. Refreshing shows different hostnames = load balancing proof</span></div>
+    <div class="code-row"><span class="code-num">17</span><span class="code-line">    })</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line"></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">@app.route(<span class="hl-str">'/health'</span>)</span><span class="code-ann">Health check endpoint — called by K8s livenessProbe and readinessProbe every few seconds</span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line"><span class="hl-kw">def</span> health():</span><span class="code-ann">Must return HTTP 200 or K8s will restart/remove the pod from load balancer</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">    <span class="hl-kw">return</span> jsonify({<span class="hl-str">"status"</span>: <span class="hl-str">"healthy"</span>, <span class="hl-str">"service"</span>: SERVICE_NAME})</span><span class="code-ann">Returns {"status":"healthy","service":"service1"} — K8s only checks for HTTP 200, not body content</span></div>
+    <div class="code-row"><span class="code-num">22</span><span class="code-line"></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">23</span><span class="code-line"><span class="hl-kw">if</span> __name__ == <span class="hl-str">'__main__'</span>:</span><span class="code-ann">Only runs when executing "python app.py" directly (not when imported as a module)</span></div>
+    <div class="code-row"><span class="code-num">24</span><span class="code-line">    app.run(<span class="hl-key">host</span>=<span class="hl-str">'0.0.0.0'</span>, <span class="hl-key">port</span>=<span class="hl-num">5000</span>)</span><span class="code-ann">host='0.0.0.0' = listen on ALL network interfaces (required in containers, not just localhost). port=5000 matches containerPort in backend.yaml</span></div>
+  </div>
+</div>
+<div class="box box-blue">
+  <div class="box-title">🔗 Connection: app.py → backend.yaml</div>
+  <ul>
+    <li>Line 8: <span class="ic">os.environ.get("APP_VERSION")</span> ← set by <span class="ic">env.APP_VERSION: "v1"</span> in backend.yaml</li>
+    <li>Line 16: <span class="ic">socket.gethostname()</span> → returns the pod name (K8s sets each pod's hostname to its pod name)</li>
+    <li>Line 24: <span class="ic">port=5000</span> ← must match <span class="ic">containerPort: 5000</span> in backend.yaml</li>
+    <li>Line 19: <span class="ic">/health</span> ← must match <span class="ic">livenessProbe.httpGet.path: /health</span> in backend.yaml</li>
+  </ul>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="dockerfile">3. Dockerfile — Packaging the App into an Image</h2>
+
+<div class="file-header">
+  <div class="fname">backend/service1/Dockerfile</div>
+  <div class="fdesc">Instructions to build a self-contained Docker image with Python + Flask + app code</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">Dockerfile</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-kw">FROM</span> <span class="hl-str">python:3.9-slim</span></span><span class="code-ann">Start from an official Python 3.9 image (Debian slim = minimal OS, ~130MB). This already has Python installed. No need to install Python on the VM.</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-kw">WORKDIR</span> <span class="hl-str">/app</span></span><span class="code-ann">Set the working directory inside the container to /app. All following commands run from here. Creates /app if it doesn't exist.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-kw">COPY</span> requirements.txt <span class="hl-str">.</span></span><span class="code-ann">Copy requirements.txt from your machine into /app/ inside the image. Done BEFORE copying app code — Docker caches this layer. If requirements don't change, pip install is skipped on rebuild (faster builds).</span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line"><span class="hl-kw">RUN</span> pip install <span class="hl-str">--no-cache-dir</span> -r requirements.txt</span><span class="code-ann">Install Flask (from requirements.txt) into the image. --no-cache-dir = don't store pip's download cache in the image (keeps image smaller). This layer is cached — only re-runs if requirements.txt changes.</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line"><span class="hl-kw">COPY</span> <span class="hl-str">.</span> <span class="hl-str">.</span></span><span class="code-ann">Copy everything else (app.py, etc.) from current folder into /app/ in the image. Done AFTER pip install so code changes don't invalidate the pip cache layer.</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line"><span class="hl-kw">EXPOSE</span> <span class="hl-num">5000</span></span><span class="code-ann">Documentation hint — tells Docker/K8s that this container listens on port 5000. Does NOT actually open the port (that's done by containerPort in backend.yaml). It's metadata only.</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line"><span class="hl-kw">CMD</span> [<span class="hl-str">"python"</span>, <span class="hl-str">"app.py"</span>]</span><span class="code-ann">The command that runs when a container starts from this image. Executes "python app.py" which starts Flask on 0.0.0.0:5000. This is what K8s runs inside every pod.</span></div>
+  </div>
+</div>
+
+<h3>Why copy requirements.txt separately (line 3) before COPY . . (line 5)?</h3>
+<div class="box box-green">
+  <div class="box-title">🐳 Docker layer caching explained</div>
+  Each line in a Dockerfile creates a cached layer. When you rebuild:<br/>
+  <ul>
+    <li>If <span class="ic">requirements.txt</span> didn't change → layers 3+4 (pip install) are <strong>reused from cache</strong> — instant</li>
+    <li>If only <span class="ic">app.py</span> changed → only layer 5 (COPY . .) rebuilds — fast</li>
+    <li>If you did COPY . . first → every code change would re-run pip install — slow</li>
+  </ul>
+</div>
+
+<div class="box box-blue">
+  <div class="box-title">🔗 Connection: Dockerfile → backend.yaml → Docker Hub</div>
+  <ol>
+    <li>GitHub Actions runs: <span class="ic">docker build -t sourabhjha108/service1:latest ./backend/service1</span></li>
+    <li>Docker reads this Dockerfile, builds the image</li>
+    <li>GitHub Actions pushes image to Docker Hub as <span class="ic">sourabhjha108/service1:latest</span></li>
+    <li>backend.yaml line 27 references: <span class="ic">image: sourabhjha108/service1:latest</span></li>
+    <li>K8s pulls that image from Docker Hub when starting each pod</li>
+  </ol>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="backend-yaml">4. backend.yaml — Deployment (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/backend.yaml</div>
+  <div class="fdesc">Kubernetes Deployment — tells K8s to run 3 pods for each backend service, what image to use, and how to check health</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">backend.yaml — service1 section (service2 and service3 follow the same pattern)</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">apps/v1</span></span><span class="code-ann">Which Kubernetes API group handles this resource. "apps/v1" is the stable API for Deployments, ReplicaSets, StatefulSets.</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Deployment</span></span><span class="code-ann">Resource type. A Deployment manages a group of identical pods (a ReplicaSet) and handles rolling updates.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann">Identity information for this Deployment object in K8s</span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">service1</span></span><span class="code-ann">Deployment name. Used in: kubectl get deployment service1. Also used by rollout restart and by ArgoCD to track the resource.</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">default</span></span><span class="code-ann">Which namespace this Deployment lives in. "default" = the built-in namespace. In Phase 3, this becomes "dev" or "prod" in the environment-specific files.</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann">Labels on the Deployment OBJECT itself (not the pods). Used for organizing/querying deployments.</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">Label on the Deployment. Lets you do: kubectl get deployment -l app=service1</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann">The desired state specification — everything below here is "what I want K8s to do"</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line">  <span class="hl-key">replicas</span>: <span class="hl-num">3</span></span><span class="code-ann">Run exactly 3 pods at all times. K8s will create new pods if any die. Change this to scale up/down.</span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">  <span class="hl-key">selector</span>:</span><span class="code-ann">How this Deployment finds "its" pods. Must match the labels in template.metadata.labels below.</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">    <span class="hl-key">matchLabels</span>:</span><span class="code-ann">The Deployment "owns" any pod that has ALL these labels</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">      <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">⚠ CRITICAL LINK: must match template.metadata.labels.app below AND Service selector.app. This is how all three connect.</span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">  <span class="hl-key">template</span>:</span><span class="code-ann">The pod template — every pod created by this Deployment looks exactly like this</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">    <span class="hl-key">metadata</span>:</span><span class="code-ann">Metadata for each pod created</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">      <span class="hl-key">labels</span>:</span><span class="code-ann">Labels stamped on every pod. The Service uses these to find pods to send traffic to.</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">        <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">⚠ CRITICAL: must match selector.matchLabels AND Service.spec.selector. The label that chains Deployment → Pod → Service together.</span></div>
+    <div class="code-row"><span class="code-num">17</span><span class="code-line">    <span class="hl-key">spec</span>:</span><span class="code-ann">Pod specification — what's inside each pod</span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line">      <span class="hl-key">topologySpreadConstraints</span>:</span><span class="code-ann">Rules for spreading pods across nodes. Prevents all 3 pods landing on one node (single point of failure).</span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">        - <span class="hl-key">maxSkew</span>: <span class="hl-num">1</span></span><span class="code-ann">Max difference in pod count between any two nodes. If node1 has 2 pods, node2 can have at most 3 (diff=1). Keeps distribution even.</span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line">          <span class="hl-key">topologyKey</span>: <span class="hl-str">kubernetes.io/hostname</span></span><span class="code-ann">Spread based on hostname (= each EC2 node). Could also use zone for AZ spread.</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">          <span class="hl-key">whenUnsatisfiable</span>: <span class="hl-str">ScheduleAnyway</span></span><span class="code-ann">If perfect spread is impossible (e.g., a node is full), still schedule the pod. "DoNotSchedule" would block the pod instead — too strict for 3-node cluster.</span></div>
+    <div class="code-row"><span class="code-num">22</span><span class="code-line">          <span class="hl-key">labelSelector</span>:</span><span class="code-ann">Which pods to count when calculating spread (only count OUR pods, not others)</span></div>
+    <div class="code-row"><span class="code-num">23</span><span class="code-line">            <span class="hl-key">matchLabels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">24</span><span class="code-line">              <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">Only count pods with app=service1 when checking spread — ignore pods from other services</span></div>
+    <div class="code-row"><span class="code-num">25</span><span class="code-line">      <span class="hl-key">containers</span>:</span><span class="code-ann">List of containers in this pod. Usually just one. Each pod = one running app instance.</span></div>
+    <div class="code-row"><span class="code-num">26</span><span class="code-line">        - <span class="hl-key">name</span>: <span class="hl-str">service1</span></span><span class="code-ann">Container name within the pod. Used in: kubectl logs <pod> -c service1. Mainly for identification.</span></div>
+    <div class="code-row"><span class="code-num">27</span><span class="code-line">          <span class="hl-key">image</span>: <span class="hl-str">sourabhjha108/service1:latest</span></span><span class="code-ann">Docker image to run. Format: dockerhub-username/repo:tag. K8s pulls this from Docker Hub. "latest" = most recently pushed image.</span></div>
+    <div class="code-row"><span class="code-num">28</span><span class="code-line">          <span class="hl-key">imagePullPolicy</span>: <span class="hl-str">Always</span></span><span class="code-ann">Always pull the image from Docker Hub when pod starts — even if it's already cached on the node. Required for :latest tags so new pushes are always picked up.</span></div>
+    <div class="code-row"><span class="code-num">29</span><span class="code-line">          <span class="hl-key">ports</span>:</span><span class="code-ann">Container ports to expose (documentation + networking)</span></div>
+    <div class="code-row"><span class="code-num">30</span><span class="code-line">            - <span class="hl-key">containerPort</span>: <span class="hl-num">5000</span></span><span class="code-ann">Flask listens on 5000 (app.py line 24). Must match. This does NOT open a firewall — it's metadata that helps K8s and tools understand port layout.</span></div>
+    <div class="code-row"><span class="code-num">31</span><span class="code-line">          <span class="hl-key">env</span>:</span><span class="code-ann">Environment variables injected into the container at runtime</span></div>
+    <div class="code-row"><span class="code-num">32</span><span class="code-line">            - <span class="hl-key">name</span>: <span class="hl-str">APP_VERSION</span></span><span class="code-ann">Variable name. Read in app.py line 8 as: os.environ.get("APP_VERSION")</span></div>
+    <div class="code-row"><span class="code-num">33</span><span class="code-line">              <span class="hl-key">value</span>: <span class="hl-str">"v1"</span></span><span class="code-ann">Value injected. Shows up in API response. Change to "v2" in a new deploy to distinguish versions during Canary rollout.</span></div>
+    <div class="code-row"><span class="code-num">34</span><span class="code-line">          <span class="hl-key">resources</span>:</span><span class="code-ann">CPU and memory budgets. Critical for K8s scheduler to place pods correctly and prevent noisy-neighbour issues.</span></div>
+    <div class="code-row"><span class="code-num">35</span><span class="code-line">            <span class="hl-key">requests</span>:</span><span class="code-ann">MINIMUM guaranteed resources. K8s scheduler only places pod on a node that has at least this much free.</span></div>
+    <div class="code-row"><span class="code-num">36</span><span class="code-line">              <span class="hl-key">cpu</span>: <span class="hl-str">"100m"</span></span><span class="code-ann">100 millicores = 0.1 CPU core. Guaranteed minimum. The "m" = milli (1000m = 1 full core).</span></div>
+    <div class="code-row"><span class="code-num">37</span><span class="code-line">              <span class="hl-key">memory</span>: <span class="hl-str">"128Mi"</span></span><span class="code-ann">128 Mebibytes RAM guaranteed. Mi = mebibytes (1Mi = 1.048 MB). Pod won't start if node doesn't have 128Mi free.</span></div>
+    <div class="code-row"><span class="code-num">38</span><span class="code-line">            <span class="hl-key">limits</span>:</span><span class="code-ann">MAXIMUM allowed. If exceeded: CPU is throttled (not killed). Memory: pod is OOMKilled and restarted.</span></div>
+    <div class="code-row"><span class="code-num">39</span><span class="code-line">              <span class="hl-key">cpu</span>: <span class="hl-str">"250m"</span></span><span class="code-ann">Max 0.25 CPU cores. If pod tries to use more, CPU is throttled but pod keeps running.</span></div>
+    <div class="code-row"><span class="code-num">40</span><span class="code-line">              <span class="hl-key">memory</span>: <span class="hl-str">"256Mi"</span></span><span class="code-ann">Max 256Mi RAM. If pod exceeds this, K8s kills it (OOMKilled) and restarts it. Prevents one pod from crashing the whole node.</span></div>
+    <div class="code-row"><span class="code-num">41</span><span class="code-line">          <span class="hl-key">livenessProbe</span>:</span><span class="code-ann">LIVENESS = "Is this pod still alive?" Fail = K8s restarts the container. Used to recover from deadlocks/hangs.</span></div>
+    <div class="code-row"><span class="code-num">42</span><span class="code-line">            <span class="hl-key">httpGet</span>:</span><span class="code-ann">K8s sends an HTTP GET request to check health. Returns 2xx = healthy. Anything else = fail.</span></div>
+    <div class="code-row"><span class="code-num">43</span><span class="code-line">              <span class="hl-key">path</span>: <span class="hl-str">/health</span></span><span class="code-ann">URL path to call. Must match @app.route('/health') in app.py line 19.</span></div>
+    <div class="code-row"><span class="code-num">44</span><span class="code-line">              <span class="hl-key">port</span>: <span class="hl-num">5000</span></span><span class="code-ann">Port to call health check on. Must match Flask's port (app.py line 24).</span></div>
+    <div class="code-row"><span class="code-num">45</span><span class="code-line">            <span class="hl-key">initialDelaySeconds</span>: <span class="hl-num">15</span></span><span class="code-ann">Wait 15 seconds before first check. Gives Flask time to start up. Without this, K8s might check before Flask is ready and restart it in a loop.</span></div>
+    <div class="code-row"><span class="code-num">46</span><span class="code-line">            <span class="hl-key">periodSeconds</span>: <span class="hl-num">20</span></span><span class="code-ann">Check every 20 seconds. If 3 consecutive checks fail (default failureThreshold=3) → container restarted.</span></div>
+    <div class="code-row"><span class="code-num">47</span><span class="code-line">          <span class="hl-key">readinessProbe</span>:</span><span class="code-ann">READINESS = "Is this pod ready to receive traffic?" Fail = remove from Service's load balancer (but don't restart). Used during startup and rolling updates.</span></div>
+    <div class="code-row"><span class="code-num">48</span><span class="code-line">            <span class="hl-key">httpGet</span>:</span><span class="code-ann">Same mechanism as liveness — HTTP GET to /health</span></div>
+    <div class="code-row"><span class="code-num">49</span><span class="code-line">              <span class="hl-key">path</span>: <span class="hl-str">/health</span></span><span class="code-ann">Same /health endpoint — if it returns 200, pod is ready. If not, traffic is redirected to other healthy pods.</span></div>
+    <div class="code-row"><span class="code-num">50</span><span class="code-line">              <span class="hl-key">port</span>: <span class="hl-num">5000</span></span><span class="code-ann">Same port as Flask. K8s checks this before allowing ingress/service to route traffic here.</span></div>
+    <div class="code-row"><span class="code-num">51</span><span class="code-line">            <span class="hl-key">initialDelaySeconds</span>: <span class="hl-num">10</span></span><span class="code-ann">Shorter delay (10s) than liveness (15s). Readiness check starts earlier — pod won't receive traffic until /health returns 200.</span></div>
+    <div class="code-row"><span class="code-num">52</span><span class="code-line">            <span class="hl-key">periodSeconds</span>: <span class="hl-num">10</span></span><span class="code-ann">Check readiness every 10s. More frequent than liveness — traffic decisions need to be faster.</span></div>
+  </div>
+</div>
+
+<div class="box box-purple">
+  <div class="box-title">🔑 Liveness vs Readiness — the key difference</div>
+  <table>
+    <tr><th>Probe</th><th>On Fail</th><th>Use case</th></tr>
+    <tr><td>livenessProbe</td><td>Container RESTARTED</td><td>App is deadlocked or crashed — needs a restart to recover</td></tr>
+    <tr><td>readinessProbe</td><td>Pod REMOVED from load balancer (not restarted)</td><td>App is starting up, or temporarily overloaded — stop sending traffic but don't kill it</td></tr>
+  </table>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="backend-service">5. backend-service.yaml — ClusterIP Service (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/backend-service.yaml</div>
+  <div class="fdesc">Creates a stable virtual IP for each backend service — pods change, the service address stays constant</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">backend-service.yaml — service1 section (service2 and service3 follow the same pattern)</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">v1</span></span><span class="code-ann">Core Kubernetes API (v1) handles Services, Pods, ConfigMaps, Namespaces. No "apps/" prefix — these are fundamental resources.</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Service</span></span><span class="code-ann">A Service is a stable network endpoint that load-balances traffic across a set of pods. It gets a fixed ClusterIP that never changes even as pods restart.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">service1</span></span><span class="code-ann">⚠ CRITICAL: This is the DNS name other components use. Ingress refers to this exact name. Other pods call it as "service1:5000". K8s DNS resolves "service1.default.svc.cluster.local" to its ClusterIP.</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">default</span></span><span class="code-ann">Must match the namespace of the pods it targets AND the Ingress that references it. Resources can only reference Services in the same namespace.</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann">Labels on the Service object — for querying only, not for routing</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">Label on the Service itself (not the pods). Used for: kubectl get svc -l app=service1</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line">  <span class="hl-key">type</span>: <span class="hl-str">ClusterIP</span></span><span class="code-ann">ClusterIP = internal only. Gets a virtual IP accessible only within the cluster. Other types: NodePort (external via node port), LoadBalancer (cloud LB). ClusterIP + Ingress is the correct pattern for HTTP services.</span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">  <span class="hl-key">selector</span>:</span><span class="code-ann">⚠ CRITICAL LINK: This is how the Service finds its pods. It looks for pods with matching labels. This is the glue between Service and Deployment.</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">service1</span></span><span class="code-ann">Send traffic to any pod that has label "app: service1". Must match backend.yaml template.metadata.labels.app. This is the selector chain: Service → (finds pods with this label) → Pod</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">  <span class="hl-key">ports</span>:</span><span class="code-ann">Port mapping — what port the Service listens on, and what port it forwards to on the pod</span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">    - <span class="hl-key">name</span>: <span class="hl-str">http</span></span><span class="code-ann">Port name — referenced in Ingress as the named port. Good practice for clarity.</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">      <span class="hl-key">protocol</span>: <span class="hl-str">TCP</span></span><span class="code-ann">HTTP runs over TCP. Could be UDP for DNS or other protocols.</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">      <span class="hl-key">port</span>: <span class="hl-num">5000</span></span><span class="code-ann">Port the Service LISTENS on. Other components (Ingress) connect to this Service on port 5000. Must match ingress.yml backend.service.port.number</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">      <span class="hl-key">targetPort</span>: <span class="hl-num">5000</span></span><span class="code-ann">Port on the POD to forward traffic to. Must match containerPort in backend.yaml AND app.py port=5000. In this case port == targetPort — they could be different (e.g., Service on 80, pod on 5000).</span></div>
+  </div>
+</div>
+
+<div class="box box-yellow">
+  <div class="box-title">⚠️ Why does K8s need a Service? Why not call pods directly?</div>
+  Pods are ephemeral — they restart constantly and get new IP addresses every time.
+  If Ingress pointed directly at a pod IP and that pod restarted, the IP changes and traffic breaks.
+  A Service has a <strong>fixed ClusterIP that never changes</strong>. K8s automatically updates which pods sit behind
+  it as pods come and go. The Service = a stable proxy in front of unstable pods.
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="frontend-yaml">6. frontend.yaml — Frontend Deployment (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/frontend.yaml</div>
+  <div class="fdesc">Runs 2 nginx pods serving the static HTML frontend — different from backend in topology spread setting</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">frontend.yaml</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">apps/v1</span></span><span class="code-ann">Same as backend — apps/v1 for Deployments</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Deployment</span></span><span class="code-ann">Same pattern as backend.yaml</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Deployment name — used with: kubectl rollout restart deployment/frontend</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">default</span></span><span class="code-ann">Same namespace as the Service and Ingress that references it</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Label on the Deployment</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line">    <span class="hl-key">tier</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Extra label for categorization. Lets you do: kubectl get all -l tier=frontend to see all frontend resources.</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">  <span class="hl-key">replicas</span>: <span class="hl-num">2</span></span><span class="code-ann">2 replicas (not 3 like backends). Frontend is lighter — 2 is enough for HA across 2 worker nodes. With DoNotSchedule below, exactly 1 pod per worker node.</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">  <span class="hl-key">selector</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">    <span class="hl-key">matchLabels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">      <span class="hl-key">app</span>: <span class="hl-str">frontend</span></span><span class="code-ann">⚠ CRITICAL: matches template.metadata.labels.app AND service.yaml selector.app — the three-way link</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">  <span class="hl-key">template</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">    <span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">      <span class="hl-key">labels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">17</span><span class="code-line">        <span class="hl-key">app</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Label on each pod — Service selector uses this to route traffic here</span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line">        <span class="hl-key">tier</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Same extra label on pods too — both Deployment and Pod objects are labelled consistently</span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">    <span class="hl-key">spec</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line">      <span class="hl-key">topologySpreadConstraints</span>:</span><span class="code-ann">Spread rule — different from backend!</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">        - <span class="hl-key">maxSkew</span>: <span class="hl-num">1</span></span><span class="code-ann">Max 1 pod difference between nodes</span></div>
+    <div class="code-row"><span class="code-num">22</span><span class="code-line">          <span class="hl-key">topologyKey</span>: <span class="hl-str">kubernetes.io/hostname</span></span><span class="code-ann">Spread across nodes (by hostname)</span></div>
+    <div class="code-row"><span class="code-num">23</span><span class="code-line">          <span class="hl-key">whenUnsatisfiable</span>: <span class="hl-str">DoNotSchedule</span></span><span class="code-ann">⚠ Different from backend! DoNotSchedule = STRICT. If we can't put pods on separate nodes, don't schedule. With 2 replicas + 2 workers: guarantees exactly 1 frontend pod per worker node.</span></div>
+    <div class="code-row"><span class="code-num">24</span><span class="code-line">      <span class="hl-key">containers</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">25</span><span class="code-line">        - <span class="hl-key">name</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Container name</span></div>
+    <div class="code-row"><span class="code-num">26</span><span class="code-line">          <span class="hl-key">image</span>: <span class="hl-str">sourabhjha108/frontend:latest</span></span><span class="code-ann">nginx image built from frontend/Dockerfile — serves the static index.html. No Python, no Flask — just nginx.</span></div>
+    <div class="code-row"><span class="code-num">27</span><span class="code-line">          <span class="hl-key">imagePullPolicy</span>: <span class="hl-str">Always</span></span><span class="code-ann">Always pull latest image (same reason as backend)</span></div>
+    <div class="code-row"><span class="code-num">28</span><span class="code-line">          <span class="hl-key">ports</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">29</span><span class="code-line">            - <span class="hl-key">containerPort</span>: <span class="hl-num">80</span></span><span class="code-ann">nginx default port is 80. Matches service.yaml targetPort: 80</span></div>
+    <div class="code-row"><span class="code-num">30</span><span class="code-line">          <span class="hl-key">livenessProbe</span>:</span><span class="code-ann">Health check — call GET / and expect HTTP 200 from nginx</span></div>
+    <div class="code-row"><span class="code-num">31</span><span class="code-line">            <span class="hl-key">httpGet</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">32</span><span class="code-line">              <span class="hl-key">path</span>: <span class="hl-str">/</span></span><span class="code-ann">Root path — nginx serves index.html here. If nginx crashes, / returns non-200 → pod restarted.</span></div>
+    <div class="code-row"><span class="code-num">33</span><span class="code-line">              <span class="hl-key">port</span>: <span class="hl-num">80</span></span><span class="code-ann">Check nginx on port 80</span></div>
+    <div class="code-row"><span class="code-num">34</span><span class="code-line">            <span class="hl-key">initialDelaySeconds</span>: <span class="hl-num">5</span></span><span class="code-ann">Only 5s delay for frontend (nginx starts in ~1s, much faster than Flask at 15s)</span></div>
+    <div class="code-row"><span class="code-num">35</span><span class="code-line">            <span class="hl-key">periodSeconds</span>: <span class="hl-num">15</span></span><span class="code-ann">Check every 15 seconds</span></div>
+  </div>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="service-yaml">7. service.yaml — Frontend Service (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/service.yaml</div>
+  <div class="fdesc">ClusterIP Service for the frontend — gives it a stable DNS name "frontend-service" inside the cluster</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">service.yaml</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">v1</span></span><span class="code-ann">Core API — same as backend-service.yaml</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Service</span></span><span class="code-ann">Service resource — stable network endpoint in front of pods</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">frontend-service</span></span><span class="code-ann">⚠ CRITICAL: This exact name is referenced in ingress.yml line 27: "name: frontend-service". K8s DNS makes this reachable as "frontend-service.default.svc.cluster.local".</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">default</span></span><span class="code-ann">Must match namespace of frontend pods AND the Ingress object</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Label on Service object — for querying, not routing</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line">  <span class="hl-key">type</span>: <span class="hl-str">ClusterIP</span></span><span class="code-ann">Internal only. The Ingress handles the external access — Service just does the internal load balancing between 2 frontend pods.</span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">  <span class="hl-key">selector</span>:</span><span class="code-ann">⚠ CRITICAL LINK: finds pods to forward traffic to by matching this label</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">    <span class="hl-key">app</span>: <span class="hl-str">frontend</span></span><span class="code-ann">Routes to all pods with label "app: frontend". Must match frontend.yaml template.metadata.labels.app (line 17).</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">  <span class="hl-key">ports</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">    - <span class="hl-key">name</span>: <span class="hl-str">http</span></span><span class="code-ann">Port name — referenced by Ingress</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">      <span class="hl-key">protocol</span>: <span class="hl-str">TCP</span></span><span class="code-ann">HTTP runs on TCP</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">      <span class="hl-key">port</span>: <span class="hl-num">80</span></span><span class="code-ann">Service listens on port 80. Ingress references this: port.number: 80</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">      <span class="hl-key">targetPort</span>: <span class="hl-num">80</span></span><span class="code-ann">Forward to pod port 80 — matches nginx containerPort (frontend.yaml line 29)</span></div>
+  </div>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="ingress">8. ingress.yml — HTTP Router (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/ingress.yml</div>
+  <div class="fdesc">The traffic cop — looks at incoming URL paths and routes each request to the correct Service</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">ingress.yml</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">networking.k8s.io/v1</span></span><span class="code-ann">Networking API group — Ingress graduated to stable v1 in K8s 1.19. Use this, not the old networking.k8s.io/v1beta1.</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Ingress</span></span><span class="code-ann">Ingress = HTTP(S) routing rules. NOT a standalone component — requires an Ingress Controller (nginx-ingress) to actually process these rules.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">app-ingress</span></span><span class="code-ann">Ingress object name. In Phase 3: becomes "app-ingress-dev" and "app-ingress-prod" per namespace.</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">default</span></span><span class="code-ann">Must be in the same namespace as the Services it routes to. In Phase 3: "dev" or "prod".</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">annotations</span>:</span><span class="code-ann">Extra config passed to the nginx-ingress controller. Annotations are controller-specific — these are nginx-specific settings.</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">nginx.ingress.kubernetes.io/proxy-connect-timeout</span>: <span class="hl-str">"30"</span></span><span class="code-ann">How long nginx waits to establish a connection to the upstream service (30 seconds). Prevents hanging requests from tying up nginx workers.</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line">    <span class="hl-key">nginx.ingress.kubernetes.io/proxy-read-timeout</span>: <span class="hl-str">"30"</span></span><span class="code-ann">How long nginx waits for the service to respond after connection is made (30 seconds). If Flask takes >30s, nginx returns 504 Gateway Timeout.</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line">  <span class="hl-key">ingressClassName</span>: <span class="hl-str">nginx</span></span><span class="code-ann">⚠ CRITICAL: Tells K8s which Ingress Controller should handle this Ingress. "nginx" matches the IngressClass created when nginx-ingress was installed via Helm. Without this, the rules are ignored.</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">  <span class="hl-key">rules</span>:</span><span class="code-ann">The routing rules — evaluated in order from most specific to least specific</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">    - <span class="hl-key">http</span>:</span><span class="code-ann">HTTP routing block. No host specified = matches ANY hostname. In production you'd add: host: myapp.example.com</span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">        <span class="hl-key">paths</span>:</span><span class="code-ann">List of path → service mappings</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">          - <span class="hl-key">path</span>: <span class="hl-str">/api/service1</span></span><span class="code-ann">Match requests starting with /api/service1 (Prefix). e.g. /api/service1, /api/service1/orders — all go to service1</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">            <span class="hl-key">pathType</span>: <span class="hl-str">Prefix</span></span><span class="code-ann">Prefix = match this path AND anything starting with it. "Exact" would only match /api/service1 exactly. "ImplementationSpecific" = controller decides.</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">            <span class="hl-key">backend</span>:</span><span class="code-ann">Where to forward matching requests</span></div>
+    <div class="code-row"><span class="code-num">17</span><span class="code-line">              <span class="hl-key">service</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line">                <span class="hl-key">name</span>: <span class="hl-str">service1</span></span><span class="code-ann">⚠ CRITICAL LINK: Must match backend-service.yaml metadata.name exactly. This is how Ingress finds the Service.</span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">                <span class="hl-key">port</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line">                  <span class="hl-key">number</span>: <span class="hl-num">5000</span></span><span class="code-ann">Must match backend-service.yaml port (line 15). Ingress → Service:5000 → Pod:5000 → Flask</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">          - <span class="hl-key">path</span>: <span class="hl-str">/api/service2</span></span><span class="code-ann">Route /api/service2/* to service2</span></div>
+    <div class="code-row"><span class="code-num">22-26</span><span class="code-line">            <span class="hl-cmt">... (same pattern) ...</span></span><span class="code-ann">service2 on port 5001, service3 on port 5002 — same structure as service1</span></div>
+    <div class="code-row"><span class="code-num">27</span><span class="code-line">          - <span class="hl-key">path</span>: <span class="hl-str">/</span></span><span class="code-ann">⚠ Catch-all. Everything not matching /api/service* goes to frontend. This MUST be the LAST path — Ingress evaluates top to bottom; more specific paths first.</span></div>
+    <div class="code-row"><span class="code-num">28</span><span class="code-line">            <span class="hl-key">pathType</span>: <span class="hl-str">Prefix</span></span><span class="code-ann">/ with Prefix = matches everything. Acts as the default route.</span></div>
+    <div class="code-row"><span class="code-num">29</span><span class="code-line">            <span class="hl-key">backend</span>: <span class="hl-key">service</span>: <span class="hl-key">name</span>: <span class="hl-str">frontend-service</span></span><span class="code-ann">⚠ CRITICAL LINK: Must match service.yaml metadata.name exactly (line 4)</span></div>
+    <div class="code-row"><span class="code-num">30</span><span class="code-line">                  <span class="hl-key">port</span>: <span class="hl-key">number</span>: <span class="hl-num">80</span></span><span class="code-ann">Must match service.yaml port: 80 (line 15). Ingress → frontend-service:80 → Pod:80 → nginx</span></div>
+  </div>
+</div>
+
+<div class="box box-green">
+  <div class="box-title">🔗 Complete Ingress routing chain</div>
+  <table>
+    <tr><th>User hits</th><th>Ingress routes to</th><th>Service</th><th>Pod port</th><th>App</th></tr>
+    <tr><td>:30080/api/service1</td><td>service1:5000</td><td>backend-service.yaml</td><td>5000</td><td>Flask Order Service</td></tr>
+    <tr><td>:30080/api/service2</td><td>service2:5001</td><td>backend-service.yaml</td><td>5001</td><td>Flask User Service</td></tr>
+    <tr><td>:30080/api/service3</td><td>service3:5002</td><td>backend-service.yaml</td><td>5002</td><td>Flask Product Service</td></tr>
+    <tr><td>:30080/ (everything else)</td><td>frontend-service:80</td><td>service.yaml</td><td>80</td><td>nginx HTML</td></tr>
+  </table>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="namespaces">9. namespaces.yaml — Environment Isolation (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">k8s/namespaces.yaml</div>
+  <div class="fdesc">Creates virtual "rooms" inside the cluster — dev and prod are completely isolated from each other</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">namespaces.yaml</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">v1</span></span><span class="code-ann">Core API — Namespaces are a fundamental resource in v1</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Namespace</span></span><span class="code-ann">Creates a logical partition in the cluster. Services in "dev" can't be reached by name from "prod" and vice versa.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">dev</span></span><span class="code-ann">Namespace name — all dev resources set "namespace: dev". Referred to in argocd/app-dev.yaml destination.namespace</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann">Labels on the Namespace object</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">    <span class="hl-key">environment</span>: <span class="hl-str">dev</span></span><span class="code-ann">Label for categorization. Used for: kubectl get ns -l environment=dev. Also used by NetworkPolicies in Phase 4 to isolate environments.</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line"><span class="hl-cmt">---</span></span><span class="code-ann">YAML document separator. Lets multiple K8s resources live in one file. K8s applies each --- block independently.</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">v1</span></span><span class="code-ann">Second resource starts here</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Namespace</span></span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">prod</span></span><span class="code-ann">prod namespace — all prod resources use "namespace: prod". Referred to in argocd/app-prod.yaml</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">    <span class="hl-key">environment</span>: <span class="hl-str">prod</span></span><span class="code-ann">Label distinguishing prod from dev. Future NetworkPolicies can use this label to block dev→prod traffic.</span></div>
+  </div>
+</div>
+
+<div class="box box-blue">
+  <div class="box-title">🔗 How Namespace connects to everything</div>
+  <ul>
+    <li>Every resource in k8s/dev/ sets <span class="ic">namespace: dev</span> — they all live inside this namespace</li>
+    <li>Every resource in k8s/prod/ sets <span class="ic">namespace: prod</span></li>
+    <li><span class="ic">argocd/app-dev.yaml</span> sets <span class="ic">destination.namespace: dev</span> — ArgoCD deploys there</li>
+    <li>Services in "dev" cannot be called by name from "prod" — complete isolation</li>
+    <li><span class="ic">kubectl get pods -n dev</span> vs <span class="ic">kubectl get pods -n prod</span> — separate views</li>
+  </ul>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="argocd-dev">10. argocd/app-dev.yaml — ArgoCD Application Dev (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">argocd/app-dev.yaml</div>
+  <div class="fdesc">Tells ArgoCD: "Watch k8s/dev/ in this repo. Auto-deploy any changes to the dev namespace."</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">app-dev.yaml</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1</span><span class="code-line"><span class="hl-key">apiVersion</span>: <span class="hl-str">argoproj.io/v1alpha1</span></span><span class="code-ann">ArgoCD's own API group. This is a Custom Resource Definition (CRD) — ArgoCD installed it when you ran the install.yaml. K8s doesn't know about "Application" natively.</span></div>
+    <div class="code-row"><span class="code-num">2</span><span class="code-line"><span class="hl-key">kind</span>: <span class="hl-str">Application</span></span><span class="code-ann">ArgoCD Application = a contract between a git repo path and a K8s namespace. ArgoCD continuously reconciles the two.</span></div>
+    <div class="code-row"><span class="code-num">3</span><span class="code-line"><span class="hl-key">metadata</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">app-dev</span></span><span class="code-ann">Application name. Shows in ArgoCD UI. Used in CLI: argocd app sync app-dev, argocd app get app-dev</span></div>
+    <div class="code-row"><span class="code-num">5</span><span class="code-line">  <span class="hl-key">namespace</span>: <span class="hl-str">argocd</span></span><span class="code-ann">⚠ The Application object itself lives in the "argocd" namespace (where ArgoCD is installed) — NOT in dev or prod. ArgoCD reads it from here.</span></div>
+    <div class="code-row"><span class="code-num">6</span><span class="code-line">  <span class="hl-key">labels</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">environment</span>: <span class="hl-str">dev</span></span><span class="code-ann">Label for filtering in ArgoCD UI: "show all dev apps"</span></div>
+    <div class="code-row"><span class="code-num">8</span><span class="code-line">  <span class="hl-key">finalizers</span>:</span><span class="code-ann">Actions K8s runs before deleting this object</span></div>
+    <div class="code-row"><span class="code-num">9</span><span class="code-line">    - <span class="hl-str">resources-finalizer.argocd.argoproj.io</span></span><span class="code-ann">When you delete this Application, ArgoCD also deletes all the K8s resources it deployed. Without this: deleting the app leaves orphan pods/services running forever.</span></div>
+    <div class="code-row"><span class="code-num">10</span><span class="code-line"><span class="hl-key">spec</span>:</span><span class="code-ann">The ArgoCD Application specification</span></div>
+    <div class="code-row"><span class="code-num">11</span><span class="code-line">  <span class="hl-key">project</span>: <span class="hl-str">default</span></span><span class="code-ann">ArgoCD Project = a logical group of apps with shared permissions. "default" = no restrictions. In Phase 4 you'd create separate projects for dev/prod with RBAC.</span></div>
+    <div class="code-row"><span class="code-num">12</span><span class="code-line">  <span class="hl-key">source</span>:</span><span class="code-ann">WHERE to get the manifests from (git)</span></div>
+    <div class="code-row"><span class="code-num">13</span><span class="code-line">    <span class="hl-key">repoURL</span>: <span class="hl-str">https://github.com/sourabh1985/devops-k8s-project.git</span></span><span class="code-ann">The GitHub repo ArgoCD watches. ArgoCD polls this every 3 minutes (or immediately on webhook). Must be accessible — public repo or configured credentials.</span></div>
+    <div class="code-row"><span class="code-num">14</span><span class="code-line">    <span class="hl-key">targetRevision</span>: <span class="hl-str">multi-node-k8s</span></span><span class="code-ann">Which git branch/tag/commit to track. "multi-node-k8s" = always use the latest commit on this branch. Could be "HEAD", a tag like "v1.0.0", or a specific commit SHA.</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">    <span class="hl-key">path</span>: <span class="hl-str">k8s/dev</span></span><span class="code-ann">⚠ CRITICAL: Only sync files under k8s/dev/ — not the whole repo. ArgoCD applies all .yaml files in this folder. This is why we split k8s/dev/ from k8s/prod/.</span></div>
+    <div class="code-row"><span class="code-num">16</span><span class="code-line">  <span class="hl-key">destination</span>:</span><span class="code-ann">WHERE to deploy the manifests (the cluster + namespace)</span></div>
+    <div class="code-row"><span class="code-num">17</span><span class="code-line">    <span class="hl-key">server</span>: <span class="hl-str">https://kubernetes.default.svc</span></span><span class="code-ann">The in-cluster K8s API server address. ArgoCD is running inside the same cluster it deploys to. This special URL always points to the local cluster's API server.</span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line">    <span class="hl-key">namespace</span>: <span class="hl-str">dev</span></span><span class="code-ann">⚠ CRITICAL LINK: Deploy all manifests into the "dev" namespace. Must match the Namespace created in namespaces.yaml and "namespace: dev" in all k8s/dev/*.yaml files.</span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">  <span class="hl-key">syncPolicy</span>:</span><span class="code-ann">How and when to sync (deploy) git changes to the cluster</span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line">    <span class="hl-key">automated</span>:</span><span class="code-ann">⚠ This block = AUTO-SYNC. For prod (app-prod.yaml) this block is MISSING = manual only.</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">      <span class="hl-key">prune</span>: <span class="hl-str">true</span></span><span class="code-ann">If you delete a file from k8s/dev/, ArgoCD deletes the corresponding K8s resource. Without prune=true, deleted manifest files leave zombie deployments running.</span></div>
+    <div class="code-row"><span class="code-num">22</span><span class="code-line">      <span class="hl-key">selfHeal</span>: <span class="hl-str">true</span></span><span class="code-ann">If someone runs kubectl manually and changes something, ArgoCD detects the drift and reverts it within 3 minutes. Git wins. Enforces GitOps discipline.</span></div>
+    <div class="code-row"><span class="code-num">23</span><span class="code-line">    <span class="hl-key">syncOptions</span>:</span><span class="code-ann">Additional sync behaviours</span></div>
+    <div class="code-row"><span class="code-num">24</span><span class="code-line">      - <span class="hl-str">CreateNamespace=true</span></span><span class="code-ann">Auto-create the "dev" namespace if it doesn't exist. Without this, the sync fails if namespace is missing.</span></div>
+    <div class="code-row"><span class="code-num">25</span><span class="code-line">      - <span class="hl-str">ApplyOutOfSyncOnly=true</span></span><span class="code-ann">Performance optimization — only apply resources that actually differ from git. Skip resources that are already in sync. Faster syncs, fewer API server calls.</span></div>
+  </div>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="argocd-prod">11. argocd/app-prod.yaml — ArgoCD Application Prod (every line)</h2>
+
+<div class="file-header">
+  <div class="fname">argocd/app-prod.yaml</div>
+  <div class="fdesc">Same as app-dev.yaml but watches k8s/prod/ and requires MANUAL sync — no auto-deploy to production</div>
+</div>
+<div class="file-body">
+<div class="code-block">
+  <div class="code-title">app-prod.yaml — differences from app-dev.yaml highlighted</div>
+  <div class="code-body">
+    <div class="code-row"><span class="code-num">1-9</span><span class="code-line"><span class="hl-cmt">... same header as app-dev.yaml ...</span></span><span class="code-ann">apiVersion, kind, metadata identical — only name and label differ</span></div>
+    <div class="code-row"><span class="code-num">4</span><span class="code-line">  <span class="hl-key">name</span>: <span class="hl-str">app-prod</span></span><span class="code-ann">Different name from app-dev. Two separate ArgoCD Applications — each with its own sync state, history, and control.</span></div>
+    <div class="code-row"><span class="code-num">7</span><span class="code-line">    <span class="hl-key">environment</span>: <span class="hl-str">prod</span></span><span class="code-ann">Prod label — filters in ArgoCD UI</span></div>
+    <div class="code-row"><span class="code-num">15</span><span class="code-line">    <span class="hl-key">path</span>: <span class="hl-str">k8s/prod</span></span><span class="code-ann">⚠ KEY DIFFERENCE: watches k8s/prod/ not k8s/dev/. ArgoCD will only apply prod manifests (with Rollouts, 3 replicas, etc.)</span></div>
+    <div class="code-row"><span class="code-num">18</span><span class="code-line">    <span class="hl-key">namespace</span>: <span class="hl-str">prod</span></span><span class="code-ann">⚠ KEY DIFFERENCE: deploys into "prod" namespace, not "dev"</span></div>
+    <div class="code-row"><span class="code-num">19</span><span class="code-line">  <span class="hl-key">syncPolicy</span>:</span><span class="code-ann"></span></div>
+    <div class="code-row"><span class="code-num">20</span><span class="code-line">    <span class="hl-key">syncOptions</span>:</span><span class="code-ann">⚠ KEY DIFFERENCE: No "automated:" block. This is intentional. Without automated, ArgoCD will detect git changes but NOT deploy them. Human must click Sync.</span></div>
+    <div class="code-row"><span class="code-num">21</span><span class="code-line">      - <span class="hl-str">CreateNamespace=true</span></span><span class="code-ann">Same as dev — auto-create prod namespace</span></div>
+    <div class="code-row"><span class="code-num">22</span><span class="code-line">      - <span class="hl-str">ApplyOutOfSyncOnly=true</span></span><span class="code-ann">Same optimization as dev</span></div>
+    <div class="code-row"><span class="code-num">—</span><span class="code-line"><span class="hl-cmt"># NOTE: no 'automated' block = manual sync only</span></span><span class="code-ann">The absence of "automated:" is the entire difference. ArgoCD shows prod as "OutOfSync" but waits for human approval to sync.</span></div>
+  </div>
+</div>
+
+<div class="box box-yellow">
+  <div class="box-title">⚠️ How to trigger prod deploy (manual sync options)</div>
+  <ol>
+    <li><strong>ArgoCD UI</strong>: Open http://&lt;MASTER_IP&gt;:30443 → click "app-prod" → click "SYNC" button → review diff → confirm</li>
+    <li><strong>CLI</strong>: <span class="ic">argocd app sync app-prod</span></li>
+    <li><strong>Diff before sync</strong>: <span class="ic">argocd app diff app-prod</span> — shows exactly what will change</li>
+  </ol>
+</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="interconnect">12. How K8s Connects Everything — The Label System</h2>
+
+<p>The entire Kubernetes networking model runs on <strong>labels + selectors</strong>. There are no hardcoded IPs anywhere.
+Here's every critical label connection in this project:</p>
+
+<div class="box box-purple">
+  <div class="box-title">🔑 The three-way label chain (most important concept)</div>
+  <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;font-size:12px">
+Deployment.spec.selector.matchLabels.app = "service1"
+         ↕ (must match)
+Pod.metadata.labels.app                  = "service1"   ← Deployment stamps this on every pod it creates
+         ↕ (must match)
+Service.spec.selector.app                = "service1"   ← Service finds pods using this label
+
+If any of these three don't match → traffic never reaches the pods.</pre>
+</div>
+
+<table>
+  <tr><th>From</th><th>Label used</th><th>To</th><th>Effect</th></tr>
+  <tr><td>Deployment (backend.yaml line 12)</td><td><span class="ic">app: service1</span></td><td>Pods created by Deployment</td><td>Deployment "owns" and manages these pods</td></tr>
+  <tr><td>Pods (backend.yaml line 16)</td><td><span class="ic">app: service1</span></td><td>Service selector (backend-service.yaml line 11)</td><td>Service load-balances traffic to these pods</td></tr>
+  <tr><td>Service (backend-service.yaml line 4)</td><td><span class="ic">name: service1</span></td><td>Ingress backend (ingress.yml line 18)</td><td>Ingress forwards /api/service1 requests to this Service</td></tr>
+  <tr><td>Namespace (namespaces.yaml line 4)</td><td><span class="ic">name: dev</span></td><td>ArgoCD destination (app-dev.yaml line 18)</td><td>ArgoCD deploys k8s/dev/ manifests into this namespace</td></tr>
+  <tr><td>All k8s/dev/*.yaml</td><td><span class="ic">namespace: dev</span></td><td>dev Namespace</td><td>All resources live inside the dev "room"</td></tr>
+</table>
+
+<h3>Full request lifecycle — URL to Python response</h3>
+<div class="flow">
+  <div class="flow-box" style="background:#fef2f2;border:2px solid #ef4444;color:#7f1d1d">User: GET http://&lt;EC2-IP&gt;:30080/api/service1</div>
+  <div class="flow-arrow">↓ TCP to EC2 public IP, port 30080</div>
+  <div class="flow-box" style="background:#faf5ff;border:2px solid #7c3aed;color:#4c1d95">nginx-ingress Controller pod<br/>(NodePort 30080 → nginx process)<br/>Reads ingress.yml rules</div>
+  <div class="flow-arrow">↓ path /api/service1 matched → backend: name=service1, port=5000</div>
+  <div class="flow-box" style="background:#eff6ff;border:2px solid #3b82f6;color:#1e3a8a">Service "service1" (ClusterIP: 10.96.x.x:5000)<br/>Selector: app=service1<br/>Finds 3 healthy pods, picks one (round-robin)</div>
+  <div class="flow-arrow">↓ kube-proxy rewrites packet to chosen pod IP</div>
+  <div class="flow-box" style="background:#f0fdf4;border:2px solid #16a34a;color:#14532d">Pod: service1-7d9f8-xk2p (running on Worker Node 2)<br/>Container: python app.py<br/>Flask receives GET /api/service1</div>
+  <div class="flow-arrow">↓ app.py processes request</div>
+  <div class="flow-box" style="background:#f0fdf4;border:2px solid #16a34a;color:#14532d">{"service":"service1","version":"v1","host":"service1-7d9f8-xk2p"}</div>
+  <div class="flow-arrow">↓ same path reversed</div>
+  <div class="flow-box" style="background:#fef2f2;border:2px solid #ef4444;color:#7f1d1d">User sees JSON in browser ✅</div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="lifecycle">13. K8s Cluster Management — What Happens Internally</h2>
+
+<h3>What happens when you run kubectl apply -f backend.yaml</h3>
+<table>
+  <tr><th>Step</th><th>Component</th><th>Action</th></tr>
+  <tr><td>1</td><td>kubectl</td><td>Sends HTTP POST/PATCH to API Server with the YAML as JSON</td></tr>
+  <tr><td>2</td><td>API Server</td><td>Validates the manifest, stores it in etcd (the cluster database)</td></tr>
+  <tr><td>3</td><td>Deployment Controller</td><td>Sees new Deployment in etcd, creates a ReplicaSet (the actual pod manager)</td></tr>
+  <tr><td>4</td><td>ReplicaSet Controller</td><td>Counts existing pods vs desired (3). Creates 3 Pod objects in etcd.</td></tr>
+  <tr><td>5</td><td>Scheduler</td><td>Sees 3 unscheduled pods. Evaluates nodes for CPU/RAM availability + topology spread rules. Assigns each pod to a node.</td></tr>
+  <tr><td>6</td><td>kubelet (on each node)</td><td>Sees it has a pod assigned to it. Calls Docker/containerd to pull the image and start the container.</td></tr>
+  <tr><td>7</td><td>kubelet</td><td>Starts running readinessProbe (GET /health). Reports pod status back to API Server.</td></tr>
+  <tr><td>8</td><td>kube-proxy (on each node)</td><td>Updates iptables/IPVS rules so the Service ClusterIP forwards to the new pod IPs.</td></tr>
+  <tr><td>9</td><td>Ingress Controller</td><td>Watches for Ingress objects. Updates its nginx config to include the new Service.</td></tr>
+  <tr><td>10</td><td>User</td><td>Traffic starts flowing to pods. Done ✅</td></tr>
+</table>
+
+<h3>What happens when a pod crashes</h3>
+<table>
+  <tr><th>Step</th><th>Component</th><th>Action</th></tr>
+  <tr><td>1</td><td>kubelet</td><td>Container exits unexpectedly. kubelet detects exit code ≠ 0.</td></tr>
+  <tr><td>2</td><td>kubelet</td><td>Reports pod status = Failed to API Server → etcd updated</td></tr>
+  <tr><td>3</td><td>ReplicaSet Controller</td><td>Sees: desired=3, actual=2. Creates a new Pod object immediately.</td></tr>
+  <tr><td>4</td><td>Scheduler</td><td>Assigns new pod to a node (respecting topology spread)</td></tr>
+  <tr><td>5</td><td>kubelet</td><td>Pulls image (or uses cache if not :latest) and starts container</td></tr>
+  <tr><td>6</td><td>kube-proxy</td><td>Old pod IP removed from Service endpoints. New pod IP added after readiness passes.</td></tr>
+  <tr><td>7</td><td>—</td><td>Total recovery time: typically 5–15 seconds</td></tr>
+</table>
+
+<h3>What happens during a rolling update (git push → new image)</h3>
+<table>
+  <tr><th>Step</th><th>What K8s does</th><th>Effect on traffic</th></tr>
+  <tr><td>1</td><td>New image pushed. kubectl apply / ArgoCD sync updates Deployment spec with new image tag</td><td>No change yet</td></tr>
+  <tr><td>2</td><td>Deployment Controller creates new ReplicaSet for v2 pods</td><td>Old pods still serving 100% traffic</td></tr>
+  <tr><td>3</td><td>Starts 1 new v2 pod (maxSurge=1 by default)</td><td>Old pods still 100%</td></tr>
+  <tr><td>4</td><td>Waits for new pod's readinessProbe to pass</td><td>New pod NOT in load balancer yet</td></tr>
+  <tr><td>5</td><td>New pod is ready → add to Service. Kill 1 old pod (maxUnavailable=1)</td><td>2 old pods + 1 new pod serving traffic</td></tr>
+  <tr><td>6</td><td>Repeat: start new pod, wait for ready, kill old</td><td>1 old + 2 new</td></tr>
+  <tr><td>7</td><td>All 3 new pods running. Old ReplicaSet scaled to 0.</td><td>3 new pods, 100% traffic</td></tr>
+  <tr><td>8</td><td>Old ReplicaSet kept (scale=0) for rollback</td><td>kubectl rollout undo instantly restores it</td></tr>
+</table>
+
+<h3>What ArgoCD does internally — reconciliation loop</h3>
+<table>
+  <tr><th>Every 3 minutes</th><th>ArgoCD action</th></tr>
+  <tr><td>Poll git for changes</td><td>Compares latest commit hash to last synced hash</td></tr>
+  <tr><td>No changes</td><td>Status = Synced ✅. Nothing to do.</td></tr>
+  <tr><td>Change detected in k8s/dev/</td><td>Computes diff between git manifests and live cluster state</td></tr>
+  <tr><td>diff exists + auto-sync on (dev)</td><td>Applies the diff (like kubectl apply). Marks as Synced.</td></tr>
+  <tr><td>diff exists + auto-sync off (prod)</td><td>Status = OutOfSync ⚠️. Waits for human to click Sync.</td></tr>
+  <tr><td>selfHeal triggered (dev)</td><td>Someone ran kubectl manually. ArgoCD reverts the cluster back to git state.</td></tr>
+  <tr><td>prune triggered (dev)</td><td>A manifest file was deleted from git. ArgoCD deletes the corresponding K8s resource.</td></tr>
+</table>
+
+<h3>Quick reference — all critical value matches across files</h3>
+<table>
+  <tr><th>Value</th><th>Must match in</th><th>Why</th></tr>
+  <tr><td><span class="ic">app: service1</span></td><td>backend.yaml selector, backend.yaml template labels, backend-service.yaml selector</td><td>The three-way label chain that connects Deployment → Pod → Service</td></tr>
+  <tr><td><span class="ic">name: service1</span> (Service)</td><td>backend-service.yaml metadata.name, ingress.yml backend.service.name</td><td>Ingress finds Service by name</td></tr>
+  <tr><td><span class="ic">port: 5000</span></td><td>app.py app.run(), backend.yaml containerPort, backend-service.yaml port+targetPort, ingress.yml port.number</td><td>Port must be consistent from Flask → pod → service → ingress</td></tr>
+  <tr><td><span class="ic">/health</span></td><td>app.py @app.route('/health'), backend.yaml livenessProbe.path, backend.yaml readinessProbe.path</td><td>K8s must be able to call this exact URL for health checks</td></tr>
+  <tr><td><span class="ic">namespace: dev</span></td><td>namespaces.yaml name, all k8s/dev/*.yaml namespace, argocd/app-dev.yaml destination.namespace</td><td>All resources in same namespace for Service DNS resolution to work</td></tr>
+  <tr><td><span class="ic">name: frontend-service</span></td><td>service.yaml metadata.name, ingress.yml backend.service.name (/ path)</td><td>Ingress finds frontend Service by this exact name</td></tr>
+  <tr><td><span class="ic">ingressClassName: nginx</span></td><td>ingress.yml, ingress.yaml (dev+prod)</td><td>Without this, nginx-ingress controller ignores the Ingress rules</td></tr>
+</table>
+
+<div class="box box-green">
+  <div class="box-title">✅ Summary — How K8s manages the cluster in one paragraph</div>
+  <p>
+  You declare your <strong>desired state</strong> in YAML files and apply them. Kubernetes stores this in etcd and runs
+  continuous <strong>reconciliation loops</strong> — controllers constantly compare desired vs actual state and fix differences.
+  The Deployment Controller ensures 3 pods always run. The ReplicaSet Controller creates/deletes pods to match.
+  The Scheduler places pods on nodes with available resources. kubelet on each node starts/monitors containers.
+  kube-proxy updates routing tables so Services always reach healthy pods. The Ingress Controller translates
+  URL path rules into nginx routing config. ArgoCD adds another loop on top — ensuring the cluster always
+  matches what's in git. If anything drifts (pod crashes, manual change, node failure), a controller notices
+  within seconds and self-heals. <strong>You never manage individual pods — you manage desired state.</strong>
+  </p>
+</div>
+
+</div><!-- end page -->
+</body>
+</html>

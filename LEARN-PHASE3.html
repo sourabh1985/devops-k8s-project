@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>K8s Phase 3 — GitOps + Deployment Strategies</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.7; }
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 32px; }
+
+  h1 { font-size: 28px; color: #0f172a; border-bottom: 3px solid #7c3aed; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { font-size: 20px; color: #5b21b6; margin: 36px 0 12px; padding-left: 12px; border-left: 4px solid #7c3aed; }
+  h3 { font-size: 16px; color: #0f172a; margin: 24px 0 8px; }
+  h4 { font-size: 14px; color: #6d28d9; margin: 16px 0 6px; }
+  p  { margin-bottom: 12px; color: #334155; }
+  ul, ol { margin: 8px 0 12px 24px; color: #334155; }
+  li { margin-bottom: 6px; }
+  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 32px; }
+
+  .box { border-radius: 10px; padding: 16px 20px; margin: 16px 0; }
+  .box-blue   { background: #eff6ff; border-left: 4px solid #3b82f6; }
+  .box-green  { background: #f0fdf4; border-left: 4px solid #16a34a; }
+  .box-yellow { background: #fffbeb; border-left: 4px solid #f59e0b; }
+  .box-red    { background: #fef2f2; border-left: 4px solid #ef4444; }
+  .box-purple { background: #faf5ff; border-left: 4px solid #7c3aed; }
+  .box-gray   { background: #f1f5f9; border-left: 4px solid #64748b; }
+  .box-title  { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+
+  pre  { background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px;
+         font-size: 12.5px; overflow-x: auto; margin: 12px 0; line-height: 1.6; }
+  code { font-family: 'Courier New', monospace; }
+  .ic  { background: #e2e8f0; color: #0f172a; padding: 1px 6px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { background: #5b21b6; color: white; padding: 9px 12px; text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .tag-new  { background: #dcfce7; color: #15803d; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .tag-chg  { background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .tag-same { background: #f1f5f9; color: #475569; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .tag-gone { background: #fee2e2; color: #991b1b; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 20px 0; }
+  .flow-box { border-radius: 10px; padding: 10px 24px; text-align: center; font-size: 13px; font-weight: 600; min-width: 240px; }
+  .flow-arrow { font-size: 22px; color: #64748b; line-height: 1.4; }
+  .flow-note  { font-size: 11px; color: #94a3b8; margin-top: -4px; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .compare-card { border-radius: 10px; padding: 16px; }
+  .before { background: #fff7ed; border: 2px solid #fb923c; }
+  .after  { background: #f0fdf4; border: 2px solid #22c55e; }
+  .compare-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .before .compare-label { color: #c2410c; }
+  .after  .compare-label { color: #15803d; }
+
+  .divider { border: none; border-top: 2px solid #e2e8f0; margin: 40px 0; }
+
+  .toc { background: #faf5ff; border: 1px solid #ddd6fe; border-radius: 10px; padding: 20px 24px; margin-bottom: 32px; }
+  .toc h3 { color: #5b21b6; margin: 0 0 12px; }
+  .toc ol { margin-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a  { color: #6d28d9; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .namespace-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .ns-card { border-radius: 10px; padding: 16px; border: 2px solid; }
+  .ns-dev  { background: #eff6ff; border-color: #3b82f6; }
+  .ns-prod { background: #f0fdf4; border-color: #16a34a; }
+  .ns-title { font-weight: 700; font-size: 15px; margin-bottom: 10px; }
+  .ns-dev .ns-title  { color: #1d4ed8; }
+  .ns-prod .ns-title { color: #15803d; }
+  .pod-chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; margin: 2px; font-weight: 600; }
+  .chip-svc1 { background: #dbeafe; color: #1d4ed8; }
+  .chip-svc2 { background: #ede9fe; color: #6d28d9; }
+  .chip-svc3 { background: #dcfce7; color: #15803d; }
+  .chip-fe   { background: #fef3c7; color: #92400e; }
+  .chip-sys  { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+  .chip-roll { background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; }
+
+  @media print { body { background: white; } .page { padding: 20px; } pre { font-size: 11px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>☸️ K8s Phase 3 — GitOps Deep Dive + Advanced Deployment Strategies</h1>
+<p class="subtitle">
+  ArgoCD Applications · Dev/Prod Namespaces · Canary (service1) · Blue-Green (service2) · Argo Rollouts<br/>
+  <strong>Tip:</strong> Open browser → File → Print → Save as PDF for offline reading
+</p>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>📋 Table of Contents</h3>
+  <ol>
+    <li><a href="#overview">Phase 2 vs Phase 3 — Master Comparison Table</a></li>
+    <li><a href="#gitops">What is GitOps? ArgoCD — Before vs After</a></li>
+    <li><a href="#namespaces">Environment Separation — dev vs prod Namespaces</a></li>
+    <li><a href="#sync">Sync Policies — Auto (dev) vs Manual (prod)</a></li>
+    <li><a href="#canary">Canary Deployment — service1</a></li>
+    <li><a href="#bluegreen">Blue-Green Deployment — service2</a></li>
+    <li><a href="#pipeline">CI/CD Pipeline Changes</a></li>
+    <li><a href="#files">New Files — What Each One Does</a></li>
+    <li><a href="#flow">End-to-End Flow Diagrams</a></li>
+    <li><a href="#commands">Quick Reference Commands</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="overview">1. Phase 2 vs Phase 3 — Master Comparison Table</h2>
+<p>Every major change at a glance. Green = new, Orange = changed, Gray = unchanged.</p>
+
+<table>
+  <tr>
+    <th>Topic</th>
+    <th>Phase 2 (Before)</th>
+    <th>Phase 3 (Now)</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td><strong>Deployment mechanism</strong></td>
+    <td>GitHub Actions SSHs into EC2 → <span class="ic">kubectl apply</span> directly</td>
+    <td>GitHub Actions registers ArgoCD apps → ArgoCD syncs from git</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>ArgoCD role</strong></td>
+    <td>Installed but completely unused (bystander)</td>
+    <td>Owns all deployments — watches repo, syncs cluster to git state</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>Namespaces</strong></td>
+    <td>Everything in <span class="ic">default</span> namespace</td>
+    <td>Separate <span class="ic">dev</span> and <span class="ic">prod</span> namespaces</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+  <tr>
+    <td><strong>Environment separation</strong></td>
+    <td>None — one environment for everything</td>
+    <td>dev = 1 replica, lean resources; prod = 3 replicas, HA</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+  <tr>
+    <td><strong>Prod approval gate</strong></td>
+    <td>None — every push deployed to prod immediately</td>
+    <td>Manual sync required for prod in ArgoCD UI</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+  <tr>
+    <td><strong>service1 deploy strategy</strong></td>
+    <td>Kubernetes rolling update (replace pods one by one)</td>
+    <td>Canary via Argo Rollouts (20% → 50% → 100% with pause windows)</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>service2 deploy strategy</strong></td>
+    <td>Kubernetes rolling update</td>
+    <td>Blue-Green via Argo Rollouts (spin up green, manual promote)</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>service3 deploy strategy</strong></td>
+    <td>Kubernetes rolling update</td>
+    <td>Kubernetes rolling update (unchanged)</td>
+    <td><span class="tag-same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Argo Rollouts</strong></td>
+    <td>Not installed</td>
+    <td>Installed in <span class="ic">argo-rollouts</span> namespace</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+  <tr>
+    <td><strong>ArgoCD Application CRDs</strong></td>
+    <td>None</td>
+    <td><span class="ic">app-dev</span> (auto-sync) + <span class="ic">app-prod</span> (manual)</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+  <tr>
+    <td><strong>Git as source of truth</strong></td>
+    <td>No — cluster state diverges from git after manual kubectl changes</td>
+    <td>Yes — selfHeal reverts any manual kubectl changes back to git</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>Image tags deployed</strong></td>
+    <td><span class="ic">:latest</span> always</td>
+    <td><span class="ic">:latest</span> (can be pinned to SHA for rollback)</td>
+    <td><span class="tag-same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>nginx-ingress</strong></td>
+    <td>NodePort 30080 in default namespace</td>
+    <td>Same — shared across dev and prod via namespace-scoped Ingress objects</td>
+    <td><span class="tag-same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Cluster infrastructure</strong></td>
+    <td>k3s, 1 master + 2 workers, t3.small</td>
+    <td>Same cluster — no infrastructure change</td>
+    <td><span class="tag-same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>CI pipeline jobs</strong></td>
+    <td>build → deploy (kubectl) → smoke-test</td>
+    <td>build → bootstrap → gitops → smoke-test</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>Manifest location</strong></td>
+    <td><span class="ic">k8s/</span> flat folder</td>
+    <td><span class="ic">k8s/dev/</span> and <span class="ic">k8s/prod/</span> subfolders + <span class="ic">argocd/</span></td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+</table>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="gitops">2. What is GitOps? ArgoCD — Before vs After</h2>
+
+<div class="box box-purple">
+  <div class="box-title">🔑 GitOps in one sentence</div>
+  Git is the single source of truth. The cluster must always match what's in git.
+  Any difference (drift) is detected and corrected automatically.
+</div>
+
+<div class="compare-grid">
+  <div class="compare-card before">
+    <div class="compare-label">❌ Phase 2 — NOT GitOps</div>
+    <ul>
+      <li>GitHub Actions SSHs into EC2</li>
+      <li>Runs <span class="ic">kubectl apply</span> manually</li>
+      <li>If someone runs <span class="ic">kubectl delete pod</span> — it's gone from cluster but NOT from git</li>
+      <li>Cluster state diverges silently from git over time</li>
+      <li>ArgoCD installed, zero config, zero usage</li>
+    </ul>
+  </div>
+  <div class="compare-card after">
+    <div class="compare-label">✅ Phase 3 — True GitOps</div>
+    <ul>
+      <li>ArgoCD watches this repo every 3 minutes</li>
+      <li>Detects any diff between git and cluster</li>
+      <li>Auto-corrects drift (selfHeal for dev)</li>
+      <li>Manual <span class="ic">kubectl</span> changes get reverted</li>
+      <li>ArgoCD Application CRDs = contracts between git and cluster</li>
+    </ul>
+  </div>
+</div>
+
+<h3>How ArgoCD Application CRD works</h3>
+<p>An <strong>Application</strong> is an ArgoCD resource that says: "Watch this git repo path, deploy it to this namespace."</p>
+
+<table>
+  <tr><th>Field</th><th>app-dev.yaml value</th><th>app-prod.yaml value</th><th>What it means</th></tr>
+  <tr>
+    <td><span class="ic">source.repoURL</span></td>
+    <td colspan="2">github.com/sourabh1985/devops-k8s-project</td>
+    <td>Which repo to watch</td>
+  </tr>
+  <tr>
+    <td><span class="ic">source.path</span></td>
+    <td><span class="ic">k8s/dev</span></td>
+    <td><span class="ic">k8s/prod</span></td>
+    <td>Which folder in repo to deploy</td>
+  </tr>
+  <tr>
+    <td><span class="ic">destination.namespace</span></td>
+    <td><span class="ic">dev</span></td>
+    <td><span class="ic">prod</span></td>
+    <td>Where in the cluster to deploy</td>
+  </tr>
+  <tr>
+    <td><span class="ic">syncPolicy.automated</span></td>
+    <td>✅ Yes (auto-sync)</td>
+    <td>❌ No (manual)</td>
+    <td>Auto-deploy on git push?</td>
+  </tr>
+  <tr>
+    <td><span class="ic">prune: true</span></td>
+    <td>✅ Yes</td>
+    <td>—</td>
+    <td>Delete k8s resources removed from git</td>
+  </tr>
+  <tr>
+    <td><span class="ic">selfHeal: true</span></td>
+    <td>✅ Yes</td>
+    <td>—</td>
+    <td>Revert manual kubectl changes to git state</td>
+  </tr>
+  <tr>
+    <td><span class="ic">CreateNamespace</span></td>
+    <td colspan="2">✅ Both</td>
+    <td>Auto-create namespace if missing</td>
+  </tr>
+</table>
+
+<h3>Phase 2 deploy flow vs Phase 3 deploy flow</h3>
+
+<div class="compare-grid">
+  <div class="compare-card before">
+    <div class="compare-label">❌ Phase 2 Flow</div>
+    <div class="flow">
+      <div class="flow-box" style="background:#fff7ed;border:2px solid #fb923c;color:#9a3412;font-size:12px">git push</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓</div>
+      <div class="flow-box" style="background:#fff7ed;border:2px solid #fb923c;color:#9a3412;font-size:12px">GitHub Actions builds images</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓ SSH</div>
+      <div class="flow-box" style="background:#fff7ed;border:2px solid #fb923c;color:#9a3412;font-size:12px">kubectl apply on EC2 master</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓</div>
+      <div class="flow-box" style="background:#fff7ed;border:2px solid #fb923c;color:#9a3412;font-size:12px">Pods updated</div>
+    </div>
+    <p style="font-size:12px;color:#7c2d12;margin-top:8px">⚠ ArgoCD not involved at all</p>
+  </div>
+  <div class="compare-card after">
+    <div class="compare-label">✅ Phase 3 Flow</div>
+    <div class="flow">
+      <div class="flow-box" style="background:#f0fdf4;border:2px solid #22c55e;color:#14532d;font-size:12px">git push</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓</div>
+      <div class="flow-box" style="background:#f0fdf4;border:2px solid #22c55e;color:#14532d;font-size:12px">GitHub Actions builds images</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓ registers apps (once)</div>
+      <div class="flow-box" style="background:#f0fdf4;border:2px solid #22c55e;color:#14532d;font-size:12px">ArgoCD detects git diff</div>
+      <div class="flow-arrow" style="color:#94a3b8">↓ dev=auto / prod=manual</div>
+      <div class="flow-box" style="background:#f0fdf4;border:2px solid #22c55e;color:#14532d;font-size:12px">Pods updated via ArgoCD</div>
+    </div>
+    <p style="font-size:12px;color:#14532d;margin-top:8px">✅ Git is the only way to change cluster state</p>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="namespaces">3. Environment Separation — dev vs prod Namespaces</h2>
+
+<div class="box box-blue">
+  <div class="box-title">🔑 What is a Namespace?</div>
+  A namespace is a virtual cluster inside your physical cluster. Resources in <span class="ic">dev</span>
+  are completely isolated from <span class="ic">prod</span>. Same cluster, different "rooms".
+</div>
+
+<h3>Phase 2 vs Phase 3 — Namespace comparison</h3>
+
+<table>
+  <tr><th>Aspect</th><th>Phase 2</th><th>Phase 3 dev</th><th>Phase 3 prod</th></tr>
+  <tr>
+    <td><strong>Namespace</strong></td>
+    <td><span class="ic">default</span></td>
+    <td><span class="ic">dev</span></td>
+    <td><span class="ic">prod</span></td>
+  </tr>
+  <tr>
+    <td><strong>service1 replicas</strong></td>
+    <td>3</td>
+    <td>1</td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>service2 replicas</strong></td>
+    <td>3</td>
+    <td>1</td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>service3 replicas</strong></td>
+    <td>3</td>
+    <td>1</td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>frontend replicas</strong></td>
+    <td>2</td>
+    <td>1</td>
+    <td>2</td>
+  </tr>
+  <tr>
+    <td><strong>CPU request per pod</strong></td>
+    <td>100m</td>
+    <td>50m (lean)</td>
+    <td>100m (full)</td>
+  </tr>
+  <tr>
+    <td><strong>Topology spread</strong></td>
+    <td>✅ Yes</td>
+    <td>❌ No (1 replica, not needed)</td>
+    <td>✅ Yes</td>
+  </tr>
+  <tr>
+    <td><strong>Deployment kind</strong></td>
+    <td>Deployment</td>
+    <td>Deployment</td>
+    <td>Rollout (service1+2), Deployment (service3)</td>
+  </tr>
+  <tr>
+    <td><strong>ArgoCD sync</strong></td>
+    <td>—</td>
+    <td>Automatic on git push</td>
+    <td>Manual approval required</td>
+  </tr>
+  <tr>
+    <td><strong>ENVIRONMENT env var</strong></td>
+    <td>Not set</td>
+    <td>"dev"</td>
+    <td>"prod"</td>
+  </tr>
+</table>
+
+<h3>Visual — what runs where</h3>
+
+<div class="namespace-grid">
+  <div class="ns-card ns-dev">
+    <div class="ns-title">🔵 dev namespace — auto-sync</div>
+    <p style="font-size:12px;color:#475569;margin-bottom:8px">Fast feedback loop. 1 replica each. Lightweight.</p>
+    <div><span class="pod-chip chip-svc1">service1 ×1</span></div>
+    <div><span class="pod-chip chip-svc2">service2 ×1</span></div>
+    <div><span class="pod-chip chip-svc3">service3 ×1</span></div>
+    <div><span class="pod-chip chip-fe">frontend ×1</span></div>
+    <div style="margin-top:8px"><span class="pod-chip chip-sys">Ingress: app-ingress-dev</span></div>
+    <p style="font-size:11px;color:#1d4ed8;margin-top:8px">Deploys automatically on every git push to k8s/dev/</p>
+  </div>
+  <div class="ns-card ns-prod">
+    <div class="ns-title">🟢 prod namespace — manual sync</div>
+    <p style="font-size:12px;color:#475569;margin-bottom:8px">HA setup. 3 replicas. Canary + Blue-Green.</p>
+    <div><span class="pod-chip chip-svc1">service1 ×3</span> <span class="pod-chip chip-roll">Canary Rollout</span></div>
+    <div><span class="pod-chip chip-svc2">service2 ×3</span> <span class="pod-chip chip-roll">Blue-Green Rollout</span></div>
+    <div><span class="pod-chip chip-svc3">service3 ×3</span></div>
+    <div><span class="pod-chip chip-fe">frontend ×2</span></div>
+    <div style="margin-top:8px"><span class="pod-chip chip-sys">Ingress: app-ingress-prod</span></div>
+    <p style="font-size:11px;color:#15803d;margin-top:8px">Requires manual "Sync" click in ArgoCD UI</p>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="sync">4. Sync Policies — Auto (dev) vs Manual (prod)</h2>
+
+<table>
+  <tr><th>Feature</th><th>dev (app-dev.yaml)</th><th>prod (app-prod.yaml)</th></tr>
+  <tr>
+    <td><strong>Sync trigger</strong></td>
+    <td>Automatic — ArgoCD polls git every 3 min</td>
+    <td>Manual — click Sync in ArgoCD UI or run CLI</td>
+  </tr>
+  <tr>
+    <td><strong>prune</strong></td>
+    <td>✅ Enabled — deleted files → deleted k8s resources</td>
+    <td>❌ Disabled — safer for prod</td>
+  </tr>
+  <tr>
+    <td><strong>selfHeal</strong></td>
+    <td>✅ Enabled — reverts manual kubectl changes</td>
+    <td>❌ Disabled — allows hotfixes if needed</td>
+  </tr>
+  <tr>
+    <td><strong>Use case</strong></td>
+    <td>Fast dev iteration, no approval needed</td>
+    <td>Production safety gate, human reviews before promoting</td>
+  </tr>
+  <tr>
+    <td><strong>Trigger prod deploy</strong></td>
+    <td>—</td>
+    <td><span class="ic">argocd app sync app-prod</span> or ArgoCD UI → Sync</td>
+  </tr>
+</table>
+
+<div class="box box-yellow">
+  <div class="box-title">⚠️ Why manual for prod?</div>
+  Imagine pushing a bug fix commit that accidentally breaks a config. In dev it auto-deploys — you catch the error fast.
+  In prod, the manual gate gives you a window to review the ArgoCD diff before it goes live.
+  You can see exactly what will change before clicking Sync.
+</div>
+
+<h3>selfHeal explained — what happens when you run kubectl manually</h3>
+<pre><code># You run this manually on the cluster (maybe to test something):
+kubectl scale deployment service1 --replicas=5 -n dev
+
+# Without selfHeal: cluster now has 5 replicas, git says 1 → they diverge
+# With selfHeal (dev): ArgoCD detects drift within 3 minutes → scales back to 1
+
+# This forces all changes to go through git — no "secret" manual changes</code></pre>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="canary">5. Canary Deployment — service1 (Order Service)</h2>
+
+<div class="box box-purple">
+  <div class="box-title">🐦 What is Canary deployment?</div>
+  Named after "canary in a coal mine". You send a small % of real traffic to the new version first.
+  If nothing blows up, you gradually increase. If errors spike, you abort with zero downtime.
+</div>
+
+<h3>Phase 2 vs Phase 3 — service1 deployment comparison</h3>
+
+<div class="compare-grid">
+  <div class="compare-card before">
+    <div class="compare-label">❌ Phase 2 — Rolling Update</div>
+    <ul>
+      <li>Kubernetes replaces pods one by one</li>
+      <li>During rollout: ~50% old pods, ~50% new pods</li>
+      <li>No control — can't pause at 20%</li>
+      <li>If new version is bad: you only notice after all pods are replaced</li>
+      <li>Rollback = <span class="ic">kubectl rollout undo</span> (affects all traffic)</li>
+    </ul>
+  </div>
+  <div class="compare-card after">
+    <div class="compare-label">✅ Phase 3 — Canary via Argo Rollouts</div>
+    <ul>
+      <li>Controlled traffic split in defined steps</li>
+      <li>Pause windows to observe metrics between steps</li>
+      <li>Abort at any step = instant rollback to 0% new version</li>
+      <li>Old pods stay running during entire ramp-up</li>
+      <li>Uses <span class="ic">kind: Rollout</span> instead of <span class="ic">kind: Deployment</span></li>
+    </ul>
+  </div>
+</div>
+
+<h3>Canary traffic flow — step by step</h3>
+<table>
+  <tr><th>Step</th><th>Traffic to new version</th><th>Traffic to old version</th><th>Duration</th><th>Action</th></tr>
+  <tr><td>Start</td><td>0%</td><td>100%</td><td>—</td><td>New image pushed, Rollout begins</td></tr>
+  <tr><td>Step 1</td><td><strong>20%</strong></td><td>80%</td><td>1 minute pause</td><td>Observe errors, latency</td></tr>
+  <tr><td>Step 2</td><td><strong>50%</strong></td><td>50%</td><td>1 minute pause</td><td>Observe, compare both versions</td></tr>
+  <tr><td>Step 3</td><td><strong>100%</strong></td><td>0%</td><td>—</td><td>Full rollout complete, old pods removed</td></tr>
+  <tr style="background:#fef2f2"><td>Abort (any step)</td><td><strong>0%</strong></td><td>100%</td><td>Instant</td><td><span class="ic">kubectl argo rollouts abort service1 -n prod</span></td></tr>
+</table>
+
+<h3>Key YAML difference — Deployment vs Rollout</h3>
+<pre><code># Phase 2 — standard Deployment (no traffic control)
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  strategy:
+    type: RollingUpdate    # Kubernetes default — no pause, no % control
+
+# ─────────────────────────────────────────────────────────────
+
+# Phase 3 — Argo Rollouts Canary (full traffic control)
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout               # ← different kind
+spec:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20     # send 20% traffic to new pods
+        - pause: {duration: 1m}   # stop here, wait, observe
+        - setWeight: 50     # send 50% traffic to new pods
+        - pause: {duration: 1m}   # stop here, wait, observe
+        - setWeight: 100    # full rollout</code></pre>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="bluegreen">6. Blue-Green Deployment — service2 (User Service)</h2>
+
+<div class="box box-green">
+  <div class="box-title">🔵🟢 What is Blue-Green deployment?</div>
+  You run two full copies of the app simultaneously — Blue (current live) and Green (new version).
+  All live traffic goes to Blue. You test Green in isolation. When ready, flip the switch —
+  100% of traffic moves to Green <strong>instantly</strong>. Blue stays warm for 60 seconds (instant rollback).
+</div>
+
+<h3>Canary vs Blue-Green — when to use which</h3>
+
+<table>
+  <tr><th>Aspect</th><th>Canary (service1)</th><th>Blue-Green (service2)</th></tr>
+  <tr>
+    <td><strong>Traffic shift</strong></td>
+    <td>Gradual (20% → 50% → 100%)</td>
+    <td>Instant (0% → 100% in one switch)</td>
+  </tr>
+  <tr>
+    <td><strong>Real user exposure</strong></td>
+    <td>Small % of real users hit new version during ramp</td>
+    <td>No real users on new version until promoted</td>
+  </tr>
+  <tr>
+    <td><strong>Resource cost</strong></td>
+    <td>Low — same pods, traffic weights shift</td>
+    <td>Higher — 2× pods running during deployment window</td>
+  </tr>
+  <tr>
+    <td><strong>Rollback speed</strong></td>
+    <td>Fast — abort shifts traffic back</td>
+    <td>Instant — switch active service back to Blue</td>
+  </tr>
+  <tr>
+    <td><strong>Test before go-live</strong></td>
+    <td>Can't test in isolation (% goes to real users)</td>
+    <td>✅ Yes — test Green via preview service before promoting</td>
+  </tr>
+  <tr>
+    <td><strong>Best for</strong></td>
+    <td>High-traffic services, gradual validation</td>
+    <td>Services needing pre-production QA before full switch</td>
+  </tr>
+</table>
+
+<h3>Blue-Green flow — step by step</h3>
+
+<div class="flow">
+  <div class="flow-box" style="background:#eff6ff;border:2px solid #3b82f6;color:#1e3a8a">New image pushed to Docker Hub</div>
+  <div class="flow-arrow">↓ ArgoCD detects change in prod</div>
+  <div class="flow-box" style="background:#eff6ff;border:2px solid #3b82f6;color:#1e3a8a">Argo Rollouts spins up GREEN pods (full 3 replicas)<br/><small>BLUE pods still running — live traffic unaffected</small></div>
+  <div class="flow-arrow">↓ Green is ready</div>
+  <div class="flow-box" style="background:#faf5ff;border:2px solid #7c3aed;color:#4c1d95"><span class="ic">service2-preview</span> → GREEN pods<br/>Test new version: curl http://&lt;master&gt;:30080/api/service2-preview</div>
+  <div class="flow-arrow">↓ Tests pass → promote</div>
+  <div class="flow-box" style="background:#f0fdf4;border:2px solid #16a34a;color:#14532d">kubectl argo rollouts promote service2 -n prod<br/><span class="ic">service2-active</span> switches → GREEN pods<br/>BLUE pods enter 60s cool-down</div>
+  <div class="flow-arrow">↓ 60 seconds later</div>
+  <div class="flow-box" style="background:#f0fdf4;border:2px solid #16a34a;color:#14532d">BLUE pods scaled down ✅<br/>GREEN is now the new BLUE (stable)</div>
+</div>
+
+<h3>Two services for service2 — why?</h3>
+
+<table>
+  <tr><th>Service name</th><th>Points to</th><th>Role</th><th>Ingress routes to it?</th></tr>
+  <tr>
+    <td><span class="ic">service2-active</span></td>
+    <td>Blue (stable) pods</td>
+    <td>Live traffic — users hit this</td>
+    <td>✅ Yes — <span class="ic">/api/service2</span> → service2-active</td>
+  </tr>
+  <tr>
+    <td><span class="ic">service2-preview</span></td>
+    <td>Green (new) pods</td>
+    <td>Testing only — QA before promotion</td>
+    <td>❌ No — accessed directly for testing</td>
+  </tr>
+</table>
+
+<pre><code># Phase 3 — Blue-Green Rollout manifest snippet
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+spec:
+  strategy:
+    blueGreen:
+      activeService: service2-active    # live traffic (Blue)
+      previewService: service2-preview  # new version (Green)
+      autoPromotionEnabled: false       # ← require manual promotion in prod
+      scaleDownDelaySeconds: 60         # keep Blue warm for 60s after switch</code></pre>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="pipeline">7. CI/CD Pipeline Changes</h2>
+
+<table>
+  <tr><th>Job</th><th>Phase 2</th><th>Phase 3</th><th>Change</th></tr>
+  <tr>
+    <td><strong>Job 1</strong></td>
+    <td>Build & Push Docker images</td>
+    <td>Build & Push Docker images</td>
+    <td><span class="tag-same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Job 2</strong></td>
+    <td>Deploy: install nginx-ingress + ArgoCD → SCP manifests → <span class="ic">kubectl apply</span> → rollout restart</td>
+    <td>Bootstrap: idempotent install of nginx-ingress + ArgoCD + <strong>Argo Rollouts</strong> + namespaces</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>Job 3</strong></td>
+    <td>Smoke test (direct endpoints)</td>
+    <td><strong>GitOps:</strong> SCP ArgoCD app manifests → <span class="ic">kubectl apply argocd/</span> → ArgoCD now owns deploys</td>
+    <td><span class="tag-chg">CHANGED</span></td>
+  </tr>
+  <tr>
+    <td><strong>Job 4</strong></td>
+    <td>—</td>
+    <td>Smoke test (waits for ArgoCD dev sync first)</td>
+    <td><span class="tag-new">NEW</span></td>
+  </tr>
+</table>
+
+<div class="box box-green">
+  <div class="box-title">💡 Key difference in Job 2</div>
+  Phase 2 Job 2 did everything in one go: install tools AND deploy manifests.<br/>
+  Phase 3 separates concerns: Job 2 = infrastructure bootstrap (idempotent),
+  Job 3 = register GitOps contracts, then ArgoCD takes over from there.
+  After the first run, Jobs 2 and 3 complete in seconds (all "already installed, skipping").
+</div>
+
+<hr class="divider"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="files">8. New Files — What Each One Does</h2>
+
+<table>
+  <tr><th>File</th><th>What it does</th><th>Key config</th></tr>
+  <tr>
+    <td><span class="ic">argocd/app-dev.yaml</span></td>
+    <td>ArgoCD Application CRD for dev environment</td>
+    <td>Auto-sync, prune, selfHeal on. Watches <span class="ic">k8s/dev/</span></td>
+  </tr>
+  <tr>
+    <td><span class="ic">argocd/app-prod.yaml</span></td>
+    <td>ArgoCD Application CRD for prod environment</td>
+    <td>Manual sync only. Watches <span class="ic">k8s/prod/</span></td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/namespaces.yaml</span></td>
+    <td>Creates dev and prod namespaces with environment labels</td>
+    <td>Labels: <span class="ic">environment: dev/prod</span></td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/dev/backend.yaml</span></td>
+    <td>Standard Deployments for service1/2/3 in dev — 1 replica each</td>
+    <td>Lean resources, ENVIRONMENT=dev env var</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/dev/frontend.yaml</span></td>
+    <td>Frontend Deployment in dev — 1 replica</td>
+    <td>No topology spread needed at 1 replica</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/dev/services.yaml</span></td>
+    <td>ClusterIP services for all 4 services in dev namespace</td>
+    <td>Same ports as Phase 2</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/dev/ingress.yaml</span></td>
+    <td>Ingress for dev namespace — routes /api/service* and /</td>
+    <td>name: app-ingress-dev</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/prod/backend.yaml</span></td>
+    <td>Rollouts for service1 (Canary) and service2 (Blue-Green), Deployment for service3</td>
+    <td>3 replicas, topology spread, ENVIRONMENT=prod</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/prod/frontend.yaml</span></td>
+    <td>Frontend Deployment in prod — 2 replicas with topology spread</td>
+    <td>DoNotSchedule spread — ensures one pod per node</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/prod/services.yaml</span></td>
+    <td>Services for prod — including service2-active and service2-preview for Blue-Green</td>
+    <td>active = live traffic, preview = green testing</td>
+  </tr>
+  <tr>
+    <td><span class="ic">k8s/prod/ingress.yaml</span></td>
+    <td>Ingress for prod — routes service2 to service2-active (live Blue/Green service)</td>
+    <td>name: app-ingress-prod</td>
+  </tr>
+  <tr>
+    <td><span class="ic">.github/workflows/deploy.yml</span></td>
+    <td>Restructured pipeline — 4 jobs: build, bootstrap, gitops, smoke-test</td>
+    <td>Adds Argo Rollouts install, ArgoCD app registration</td>
+  </tr>
+</table>
+
+<h3>Folder structure — Phase 2 vs Phase 3</h3>
+
+<div class="compare-grid">
+  <div class="compare-card before">
+    <div class="compare-label">Phase 2 structure</div>
+<pre style="margin:0;font-size:11px">k8s/
+  backend.yaml
+  backend-service.yaml
+  frontend.yaml
+  service.yaml
+  ingress.yml
+
+.github/workflows/
+  deploy.yml</pre>
+  </div>
+  <div class="compare-card after">
+    <div class="compare-label">Phase 3 structure</div>
+<pre style="margin:0;font-size:11px">k8s/
+  namespaces.yaml        ← NEW
+  dev/                   ← NEW
+    backend.yaml
+    frontend.yaml
+    services.yaml
+    ingress.yaml
+  prod/                  ← NEW
+    backend.yaml  (Rollouts)
+    frontend.yaml
+    services.yaml
+    ingress.yaml
+
+argocd/                  ← NEW
+  app-dev.yaml
+  app-prod.yaml
+
+.github/workflows/
+  deploy.yml             ← UPDATED</pre>
+  </div>
+</div>
+
+<hr class="divider"/>
