@@ -1,22 +1,18 @@
+---
+# ── Dev: service1 ingress — /dev/api/service1 → /api/service1 ─
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: app-ingress-dev
+  name: app-ingress-dev-service1
   namespace: dev
   annotations:
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    # Rewrite strips /dev prefix.
-    # Pattern /dev/(.*) captures everything after /dev/ into $1
-    # rewrite-target: /$1 → /dev/api/service1 becomes /api/service1
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/service1$1
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          # /dev/api/service1 → Flask sees /api/service1
           - path: /dev/api/service1(/?.*)
             pathType: ImplementationSpecific
             backend:
@@ -24,8 +20,21 @@ spec:
                 name: service1
                 port:
                   number: 5000
-
-          # /dev/api/service2 → Flask sees /api/service2
+---
+# ── Dev: service2 ingress — /dev/api/service2 → /api/service2 ─
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-dev-service2
+  namespace: dev
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/service2$1
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
           - path: /dev/api/service2(/?.*)
             pathType: ImplementationSpecific
             backend:
@@ -33,8 +42,21 @@ spec:
                 name: service2
                 port:
                   number: 5001
-
-          # /dev/api/service3 → Flask sees /api/service3
+---
+# ── Dev: service3 ingress — /dev/api/service3 → /api/service3 ─
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-dev-service3
+  namespace: dev
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/service3$1
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
           - path: /dev/api/service3(/?.*)
             pathType: ImplementationSpecific
             backend:
@@ -42,8 +64,21 @@ spec:
                 name: service3
                 port:
                   number: 5002
-
-          # /dev or /dev/anything-else → frontend sees /
+---
+# ── Dev: frontend ingress — /dev → /  ─────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-dev-frontend
+  namespace: dev
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
           - path: /dev(/?.*)
             pathType: ImplementationSpecific
             backend:
