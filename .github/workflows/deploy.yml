@@ -1,4 +1,4 @@
-name: Build & Deploy — Multi-Node K8s
+name: Build & Deploy — K8s Phase 3 (GitOps + Rollouts)
 
 on:
   push:
@@ -13,6 +13,8 @@ jobs:
   build:
     name: Build & Push Images
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,16 +45,17 @@ jobs:
           docker push $DOCKER_USER/frontend:latest
           docker push $DOCKER_USER/frontend:${{ github.sha }}
 
-  # ── Job 2: Deploy to k3s cluster ──────────────────────────────
-  deploy:
-    name: Deploy to k3s Cluster
+  # ── Job 2: Bootstrap cluster (idempotent) ─────────────────────
+  # Installs nginx-ingress, ArgoCD, Argo Rollouts if not present.
+  # On subsequent runs these are all skipped quickly.
+  bootstrap:
+    name: Bootstrap Cluster
     runs-on: ubuntu-latest
     needs: build
     steps:
       - uses: actions/checkout@v4
 
-      # Step 1 — Ensure nginx-ingress is installed correctly
-      - name: Ensure nginx-ingress
+      - name: Install nginx-ingress (if missing)
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_IP }}
@@ -61,41 +64,25 @@ jobs:
           script: |
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            # Check if nginx-ingress controller pod is Running
             RUNNING=$(kubectl get pods -n ingress-nginx \
-              --field-selector=status.phase=Running \
-              --no-headers 2>/dev/null | grep -c "ingress-nginx-controller" || true)
+              --field-selector=status.phase=Running --no-headers 2>/dev/null \
+              | grep -c "ingress-nginx-controller" || true)
 
             if [ "$RUNNING" -ge "1" ]; then
-              echo "nginx-ingress already running, skipping install"
+              echo "nginx-ingress already running, skipping"
             else
-              echo "nginx-ingress not running, installing..."
-
-              # Clean up any broken install
-              helm uninstall ingress-nginx -n ingress-nginx 2>/dev/null || true
-              kubectl delete namespace ingress-nginx 2>/dev/null || true
-              sleep 10
-
-              # Install fresh
               helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
               helm repo update
-
               helm install ingress-nginx ingress-nginx/ingress-nginx \
-                --namespace ingress-nginx \
-                --create-namespace \
+                --namespace ingress-nginx --create-namespace \
                 --set controller.service.type=NodePort \
                 --set controller.service.nodePorts.http=30080 \
                 --set controller.service.nodePorts.https=30444 \
                 --wait --timeout=180s
-
               echo "nginx-ingress installed"
             fi
 
-            kubectl get pods -n ingress-nginx
-            kubectl get svc -n ingress-nginx
-
-      # Step 2 — Install ArgoCD (skip if already installed)
-      - name: Install ArgoCD
+      - name: Install ArgoCD (if missing)
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_IP }}
@@ -111,7 +98,6 @@ jobs:
               kubectl apply -n argocd \
                 -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-              echo "Waiting for argocd-server..."
               kubectl wait --for=condition=available \
                 deployment/argocd-server -n argocd --timeout=300s
 
@@ -121,18 +107,7 @@ jobs:
               echo "ArgoCD installed on NodePort 30443"
             fi
 
-      # Step 3 — Copy k8s manifests to master
-      - name: Copy K8s manifests
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_IP }}
-          username: ec2-user
-          key: ${{ secrets.SSH_KEY }}
-          source: "k8s/"
-          target: "/home/ec2-user/"
-
-      # Step 4 — Apply manifests
-      - name: Apply manifests & rollout
+      - name: Install Argo Rollouts (if missing)
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_IP }}
@@ -141,52 +116,111 @@ jobs:
           script: |
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            echo "=== Applying services first ==="
-            kubectl apply -f /home/ec2-user/k8s/backend-service.yaml
-            kubectl apply -f /home/ec2-user/k8s/service.yaml
+            if kubectl get ns argo-rollouts &>/dev/null; then
+              echo "Argo Rollouts already installed, skipping"
+            else
+              kubectl create namespace argo-rollouts
+              kubectl apply -n argo-rollouts \
+                -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
 
-            echo "=== Applying deployments ==="
-            kubectl apply -f /home/ec2-user/k8s/backend.yaml
-            kubectl apply -f /home/ec2-user/k8s/frontend.yaml
+              kubectl wait --for=condition=available \
+                deployment/argo-rollouts -n argo-rollouts --timeout=180s
 
-            echo "=== Deleting old ingress and reapplying fresh ==="
-            kubectl delete ingress app-ingress 2>/dev/null || true
-            sleep 3
-            kubectl apply -f /home/ec2-user/k8s/ingress.yml
+              echo "Argo Rollouts installed"
+            fi
 
-            echo "=== Rolling restart to pull latest images ==="
-            kubectl rollout restart deployment/service1
-            kubectl rollout restart deployment/service2
-            kubectl rollout restart deployment/service3
-            kubectl rollout restart deployment/frontend
+      - name: Create namespaces (dev + prod)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            kubectl apply -f /home/ec2-user/k8s/namespaces.yaml 2>/dev/null || \
+              kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f - && \
+              kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
+            echo "Namespaces ready"
+            kubectl get namespaces | grep -E "dev|prod|argocd|argo-rollouts"
 
-            echo "=== Waiting for rollouts ==="
-            kubectl rollout status deployment/service1 --timeout=120s
-            kubectl rollout status deployment/service2 --timeout=120s
-            kubectl rollout status deployment/service3 --timeout=120s
-            kubectl rollout status deployment/frontend  --timeout=120s
-
-            echo ""
-            echo "=== Pods ==="
-            kubectl get pods -o wide
-
-            echo ""
-            echo "=== Ingress ==="
-            kubectl describe ingress app-ingress
-
-            echo "Deployment complete!"
-
-  # ── Job 3: Smoke test ──────────────────────────────────────────
-  smoke-test:
-    name: Smoke Test
+  # ── Job 3: Register ArgoCD Applications (GitOps) ──────────────
+  # Applies the ArgoCD Application CRDs — after this ArgoCD owns all deploys.
+  # dev  → auto-sync (deploys immediately on git push)
+  # prod → manual sync (requires approval in ArgoCD UI)
+  gitops:
+    name: Register ArgoCD Apps
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: bootstrap
     steps:
-      - name: Health check all endpoints
+      - uses: actions/checkout@v4
+
+      - name: Copy ArgoCD app manifests & namespaces to master
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          source: "argocd/,k8s/namespaces.yaml"
+          target: "/home/ec2-user/"
+
+      - name: Apply ArgoCD Application CRDs
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "=== Applying namespaces ==="
+            kubectl apply -f /home/ec2-user/k8s/namespaces.yaml
+
+            echo "=== Registering ArgoCD Applications ==="
+            kubectl apply -f /home/ec2-user/argocd/app-dev.yaml
+            kubectl apply -f /home/ec2-user/argocd/app-prod.yaml
+
+            echo ""
+            echo "=== ArgoCD Applications ==="
+            kubectl get applications -n argocd
+
+            echo ""
+            echo "ArgoCD now manages deployments via GitOps."
+            echo "  dev  → auto-sync  (deploys on every git push)"
+            echo "  prod → manual sync (approve in ArgoCD UI: http://\$(curl -sf http://169.254.169.254/latest/meta-data/public-ipv4):30443)"
+
+  # ── Job 4: Smoke test ──────────────────────────────────────────
+  # Waits for ArgoCD to sync dev, then hits all endpoints
+  smoke-test:
+    name: Smoke Test (dev)
+    runs-on: ubuntu-latest
+    needs: gitops
+    steps:
+      - name: Wait for ArgoCD dev sync & health check
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "Waiting for dev namespace pods to be ready..."
+            kubectl wait --for=condition=ready pod \
+              -l env=dev -n dev --timeout=180s || true
+
+            echo ""
+            echo "=== Dev Pods ==="
+            kubectl get pods -n dev -o wide
+
+            echo ""
+            echo "=== Dev Ingress ==="
+            kubectl get ingress -n dev
+
+      - name: HTTP smoke test — dev endpoints
         run: |
           BASE="http://${{ secrets.EC2_IP }}:30080"
-          echo "Testing $BASE ..."
-          sleep 20
+          echo "Smoke testing $BASE ..."
+          sleep 15
 
           for path in "/" "/api/service1" "/api/service2" "/api/service3"; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE$path" || echo "000")

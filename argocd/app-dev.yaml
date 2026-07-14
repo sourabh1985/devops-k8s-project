@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-dev
+  namespace: argocd
+  labels:
+    environment: dev
+  # Finalizer ensures ArgoCD cleans up k8s resources when this Application is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # ── Source: this repo, k8s/dev/ folder ──────────────────────
+  source:
+    repoURL: https://github.com/sourabh1985/devops-k8s-project.git
+    targetRevision: multi-node-k8s   # track this branch
+    path: k8s/dev                    # only sync files under k8s/dev/
+
+  # ── Destination: dev namespace on in-cluster k3s ─────────────
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+
+  # ── Sync Policy: AUTO for dev ────────────────────────────────
+  # Any git push to k8s/dev/ auto-deploys — no manual approval needed
+  syncPolicy:
+    automated:
+      prune: true      # delete k8s resources removed from git
+      selfHeal: true   # revert manual kubectl changes back to git state
+    syncOptions:
+      - CreateNamespace=true   # create 'dev' namespace if missing
+      - ApplyOutOfSyncOnly=true

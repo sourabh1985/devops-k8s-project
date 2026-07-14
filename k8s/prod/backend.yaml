@@ -1,0 +1,201 @@
+---
+# ── Prod: Order Service (service1) ───────────────────────────
+# Uses Canary deployment strategy via Argo Rollouts
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: service1
+  namespace: prod
+  labels:
+    app: service1
+    env: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: service1
+  template:
+    metadata:
+      labels:
+        app: service1
+        env: prod
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: service1
+      containers:
+        - name: service1
+          image: sourabhjha108/service1:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: APP_VERSION
+              value: "v1"
+            - name: ENVIRONMENT
+              value: "prod"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  # ── Canary Strategy ──────────────────────────────────────────
+  # On every new image push:
+  #   Step 1: Route 20% traffic to new version, pause for 1 min
+  #   Step 2: Route 50% traffic, pause for 1 min
+  #   Step 3: Promote to 100% (full rollout)
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20          # 20% traffic → new version
+        - pause: {duration: 1m}  # wait 1 minute, monitor
+        - setWeight: 50          # 50% traffic → new version
+        - pause: {duration: 1m}  # wait 1 minute, monitor
+        - setWeight: 100         # full rollout
+---
+# ── Prod: User Service (service2) — Blue-Green ───────────────
+# Blue-Green: two full deployments (blue=stable, green=new)
+# Traffic switches atomically via Argo Rollouts
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: service2
+  namespace: prod
+  labels:
+    app: service2
+    env: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: service2
+  template:
+    metadata:
+      labels:
+        app: service2
+        env: prod
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: service2
+      containers:
+        - name: service2
+          image: sourabhjha108/service2:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+          env:
+            - name: APP_VERSION
+              value: "v1"
+            - name: ENVIRONMENT
+              value: "prod"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  # ── Blue-Green Strategy ──────────────────────────────────────
+  # Green (new) deployment spun up first, traffic stays on Blue.
+  # After autoPromotionSeconds: manual promotion moves traffic to Green.
+  # Blue kept for 60s post-promotion (instant rollback window).
+  strategy:
+    blueGreen:
+      activeService: service2-active    # live traffic always goes here
+      previewService: service2-preview  # green (new version) gets preview traffic
+      autoPromotionEnabled: false       # require manual promotion in prod
+      scaleDownDelaySeconds: 60         # keep old (blue) pods for 60s after switch
+---
+# ── Prod: Product Service (service3) ─────────────────────────
+# Standard rolling update — no special strategy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service3
+  namespace: prod
+  labels:
+    app: service3
+    env: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: service3
+  template:
+    metadata:
+      labels:
+        app: service3
+        env: prod
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: service3
+      containers:
+        - name: service3
+          image: sourabhjha108/service3:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5002
+          env:
+            - name: APP_VERSION
+              value: "v1"
+            - name: ENVIRONMENT
+              value: "prod"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5002
+            initialDelaySeconds: 10
+            periodSeconds: 10

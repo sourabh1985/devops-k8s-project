@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-prod
+  namespace: argocd
+  labels:
+    environment: prod
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # ── Source: this repo, k8s/prod/ folder ─────────────────────
+  source:
+    repoURL: https://github.com/sourabh1985/devops-k8s-project.git
+    targetRevision: multi-node-k8s
+    path: k8s/prod
+
+  # ── Destination: prod namespace ──────────────────────────────
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+
+  # ── Sync Policy: MANUAL for prod ─────────────────────────────
+  # No automated sync — someone must click "Sync" in ArgoCD UI
+  # or run: argocd app sync app-prod
+  # This prevents accidental production deployments
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    # NOTE: no 'automated' block = manual sync only
